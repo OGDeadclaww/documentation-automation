@@ -65,111 +65,89 @@ class VendorProfile:
 # ============================================
 
 class AluProfProfile(VendorProfile):
-    """
-    Parser kodów Aluprof.
-    
-    Profile:
-        "K51 8143 4R8017" → "K518143"
-        "K51 8395"        → "K518395"
-        "120 470"         → "120470"   (bez prefiksu K)
-    
-    Okucia:
-        "8000 965 D"      → "8000965X" (kolor → X)
-        "8000 2590"       → "80002590" (brak koloru)
-        "8000 4431"       → "80004431"
-        "967 D"           → "967X"
-    """
     NAME = "Aluprof"
     KEY = "aluprof"
 
-    # Profile: K## #### (z opcjonalnym sufiksem 4R...)
+    # Profile
     PROFILE_K_RE = re.compile(r"\bK(\d{2})\s*(\d{4})\b", re.IGNORECASE)
-    
-    # Profile: ### ### lub ### #### (bez prefiksu K)
     PROFILE_BARE_RE = re.compile(r"\b(\d{2,3})\s+(\d{3,4})\b")
 
-    # Okucia: grupy cyfr z opcjonalnym sufiksem koloru
+    # Okucia: obsługuje mieszane kody alfanumeryczne
+    # Grupa 1: kod bazowy (np. "8A022", "8000", "8010")
+    # Grupa 2: druga część z opcjonalnym kolorem (np. "27I4", "965", "2590", "544 B4")
     HARDWARE_RE = re.compile(
-        r"\b(\d{3,4})\s+(\d{1,4})\s*([A-Z]\d?|[A-Z]{1,2}\d)?\b",
+        r"\b(\d[A-Z0-9]{2,5})\s+(\d+[A-Z]\d+|\d{1,4})\s*([A-Z]\d?|[A-Z]{1,2}\d)?\b",
         re.IGNORECASE
     )
-
-    # Okucia: krótki format (np. "967 D")
-    HARDWARE_SHORT_RE = re.compile(
-        r"\b(\d{3,6})\s+([A-Z]\d?)\b",
-        re.IGNORECASE
-    )
-
-    @classmethod
-    def parse_profile_code(cls, code_text: str) -> str:
-        """
-        Parsuje kod profilu Aluprof.
-        
-        Przykłady:
-            "K51 8143 4R8017" → "K518143"
-            "K12 0470"        → "K120470"
-            "120 470"         → "120470"
-            "brak kodu"       → ""
-        """
-        t = clean(code_text).upper()
-
-        # Wariant 1: Z prefiksem K (np. "K51 8143")
-        m = cls.PROFILE_K_RE.search(t)
-        if m:
-            return f"K{m.group(1)}{m.group(2)}"
-
-        # Wariant 2: Bez prefiksu K (np. "120 470")
-        m = cls.PROFILE_BARE_RE.search(t)
-        if m:
-            combined = m.group(1) + m.group(2)
-            if 5 <= len(combined) <= 6:
-                return combined
-
-        return ""
 
     @classmethod
     def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:
         """
         Parsuje kod okucia Aluprof.
-        Dodaje sufiks X gdy wykryto kod koloru.
         
         Przykłady:
+            "8A022 27I4"    → "8A02227X"   (kolor I4 w środku → X)
             "8000 965 D"    → "8000965X"   (kolor D → X)
             "8000 969 B4"   → "8000969X"   (kolor B4 → X)
             "8000 2590"     → "80002590"   (brak koloru)
             "8000 4431"     → "80004431"
             "8010 544 B4"   → "8010544X"
             "967 D"         → "967X"       (krótki format)
-            
-        Args:
-            code_text: Surowy tekst
-            color_suffix: Wymuszony kolor (jeśli None, wykrywa z tekstu)
         """
-        t = clean(code_text)
+        t = clean(code_text).upper()
+        if not t:
+            return ""
 
-        # Próbuj pełny format: #### #### [kolor]
-        m = cls.HARDWARE_RE.search(t)
-        if m:
-            part1 = m.group(1)
-            part2 = m.group(2)
-            color = m.group(3) or ""
+        # ─── Pattern 1: Kolor WEWNĄTRZ drugiej części (np. "8A022 27I4") ───
+        m_embedded = re.search(
+            r"\b(\d[A-Z0-9]{2,5})\s+(\d+)([A-Z]\d*)(\d*)\b",
+            t
+        )
+        if m_embedded:
+            part1 = m_embedded.group(1)          # "8A022"
+            digits_before = m_embedded.group(2)   # "27"
+            color_letter = m_embedded.group(3)    # "I4" lub "I"
+            digits_after = m_embedded.group(4)    # "" lub dodatkowe cyfry
 
-            # Czy jest kolor (z tekstu lub wymuszony)?
-            has_color = bool(color) or bool(color_suffix)
+            # Sprawdź czy to wygląda na kolor (litera + opcjonalna cyfra)
+            if re.match(r"^[A-Z]\d?$", color_letter):
+                # Kolor w środku → wyciągnij same cyfry + X
+                all_digits = digits_before + digits_after
+                return f"{part1}{all_digits}X"
 
-            if has_color:
+        # ─── Pattern 2: Standardowy format (np. "8000 965 D") ───
+        m_standard = re.search(
+            r"\b(\d{3,4})\s+(\d{1,4})\s+([A-Z]\d?|[A-Z]{1,2}\d)\b",
+            t
+        )
+        if m_standard:
+            part1 = m_standard.group(1)
+            part2 = m_standard.group(2)
+            return f"{part1}{part2}X"
+
+        # ─── Pattern 3: Bez koloru (np. "8000 4431") ───
+        m_plain = re.search(
+            r"\b(\d[A-Z0-9]{2,5})\s+(\d{1,4})\b",
+            t
+        )
+        if m_plain:
+            part1 = m_plain.group(1)
+            part2 = m_plain.group(2)
+
+            if color_suffix:
                 return f"{part1}{part2}X"
-            
-            # Brak koloru - dopełnij zerami jeśli trzeba
+
             if len(part1) == 4 and len(part2) < 4:
                 return f"{part1}{part2.zfill(4)}"
             return f"{part1}{part2}"
 
-        # Próbuj krótki format: ### [kolor] (np. "967 D")
-        m = cls.HARDWARE_SHORT_RE.search(t)
-        if m:
-            part1 = m.group(1)
-            return f"{part1}X"
+        # ─── Pattern 4: Krótki format z kolorem (np. "967 D") ───
+        m_short = re.search(
+            r"\b(\d{3,6})\s+([A-Z]\d?)\b",
+            t
+        )
+        if m_short:
+            return f"{m_short.group(1)}X"
 
         return ""
 
@@ -257,3 +235,29 @@ def get_vendor_by_key(key: str) -> type:
 def list_vendors() -> list:
     """Zwraca listę (key, name) dostępnych dostawców."""
     return [(key, cls.NAME) for key, cls in VENDOR_PROFILES.items()]
+
+# Szybki test
+if __name__ == "__main__":
+    tests = [
+        ("8A022 27I4",   "8A02227X"),
+        ("8000 965 D",   "8000965X"),
+        ("8000 969 B4",  "8000969X"),
+        ("8000 2590",    "80002590"),
+        ("8000 4431",    "80004431"),
+        ("8010 544 B4",  "8010544X"),
+        ("8000 9732",    "80009732"),
+        ("8000 977 B4",  "8000977X"),
+        ("8000 989 B4",  "8000989X"),
+        ("8010 4991",    "80104991"),
+        ("8045 5040",    "80455040"),
+        ("8032 2073",    "80322073"),
+        ("8032 2077",    "80322077"),
+        ("967 D",        "967X"),
+        ("K51 8143",     ""),       # profil, nie okucie
+        ("",             ""),
+    ]
+
+    for input_text, expected in tests:
+        result = AluProfProfile.parse_hardware_code(input_text)
+        status = "✅" if result == expected else "❌"
+        print(f"  {status} '{input_text}' → '{result}' (oczekiwano: '{expected}')")

@@ -263,6 +263,12 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
             hardware_codes[code_hw] = {"desc": desc, "positions": set()}
         hardware_codes[code_hw]["positions"].add(current_pos)
 
+    unique_codes = sorted(set(hardware_codes))
+    print("DEBUG: kody okuć wykryte w CSV (unikalne):")
+    for code in unique_codes:
+        print("   -", code)
+    print(f"DEBUG: razem {len(unique_codes)} kodów")
+    
     return hardware_codes
 
 
