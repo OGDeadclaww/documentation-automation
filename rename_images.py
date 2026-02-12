@@ -197,6 +197,112 @@ def select_file(file_type, title):
     file_path = filedialog.askopenfilename(title=title, filetypes=filetypes.get(file_type, filetypes["ALL"]))
     return file_path if file_path else None
 
+def select_project_from_list(projects_folder):
+    """
+    Wyświetla listę projektów w oknie dialogowym do wyboru.
+    
+    Args:
+        projects_folder: Ścieżka do folderu z projektami
+    
+    Returns:
+        str: Nazwa wybranego projektu lub None
+    """
+    if not os.path.exists(projects_folder):
+        messagebox.showerror("Błąd", f"Brak folderu: {projects_folder}")
+        return None
+    
+    # Filtruj projekty (foldery zaczynające się od "20")
+    projects = sorted([
+        d for d in os.listdir(projects_folder)
+        if os.path.isdir(os.path.join(projects_folder, d)) and d.startswith('20')
+    ], reverse=True)  # Najnowsze na górze
+    
+    if not projects:
+        messagebox.showerror("Błąd", "Brak projektów w folderze")
+        return None
+    
+    # Okno wyboru
+    root = tk.Tk()
+    root.withdraw()
+    
+    choice_window = tk.Toplevel()
+    choice_window.title("Wybierz projekt")
+    choice_window.geometry("600x500")
+    
+    # Nagłówek
+    tk.Label(
+        choice_window,
+        text=f"Znaleziono {len(projects)} projektów:",
+        font=("Arial", 12, "bold")
+    ).pack(pady=10)
+    
+    # Frame z listą i scrollbarem
+    frame = tk.Frame(choice_window)
+    frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+    
+    scrollbar = tk.Scrollbar(frame)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    
+    listbox = tk.Listbox(
+        frame,
+        yscrollcommand=scrollbar.set,
+        font=("Courier", 10),
+        height=15
+    )
+    listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    scrollbar.config(command=listbox.yview)
+    
+    # Wypełnij listę
+    for project in projects:
+        listbox.insert(tk.END, project)
+    
+    # Zaznacz pierwszy (najnowszy)
+    listbox.selection_set(0)
+    listbox.activate(0)
+    
+    selected_project = {"value": None}
+    
+    def on_select():
+        selection = listbox.curselection()
+        if selection:
+            selected_project["value"] = projects[selection[0]]
+            choice_window.destroy()
+    
+    def on_cancel():
+        choice_window.destroy()
+    
+    def on_double_click(event):
+        on_select()
+    
+    listbox.bind("<Double-Button-1>", on_double_click)
+    
+    # Przyciski
+    btn_frame = tk.Frame(choice_window)
+    btn_frame.pack(pady=10)
+    
+    tk.Button(
+        btn_frame,
+        text="Wybierz",
+        command=on_select,
+        font=("Arial", 10),
+        bg="#4CAF50",
+        fg="white",
+        width=15
+    ).pack(side="left", padx=10)
+    
+    tk.Button(
+        btn_frame,
+        text="Anuluj",
+        command=on_cancel,
+        font=("Arial", 10),
+        bg="#f44336",
+        fg="white",
+        width=15
+    ).pack(side="left", padx=10)
+    
+    choice_window.wait_window()
+    return selected_project["value"]
+
 def select_folder(title):
     root = tk.Tk()
     root.withdraw()
@@ -635,16 +741,9 @@ def main():
     
     print("[1/7] Wybierz projekt...")
     projects_folder = os.path.join(BASE_PATH, "projects")
-    if not os.path.exists(projects_folder):
-        messagebox.showerror("Błąd", "Brak folderu projects/")
-        return
-    projects = [d for d in os.listdir(projects_folder) if os.path.isdir(os.path.join(projects_folder, d)) and d.startswith('20')]
-    if not projects:
-        messagebox.showerror("Błąd", "Brak projektów")
-        return
-    project_name = simpledialog.askstring("Projekt", f"Znaleziono {len(projects)} projektów.\n\nPrzykłady:\n" + "\n".join(projects[:5]) + "\n\nWpisz nazwę projektu:")
-    if not project_name or project_name not in projects:
-        messagebox.showerror("Błąd", "Nieprawidłowy projekt.")
+    project_name = select_project_from_list(projects_folder)
+    if not project_name:
+        messagebox.showerror("Błąd", "Nie wybrano projektu.")
         return
     print(f"✓ Wybrano: {project_name}\n")
     
