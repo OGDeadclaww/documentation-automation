@@ -724,6 +724,44 @@ def rename_hardware(hardware_codes, code_to_srcfile, srcdir, output_dir):
     print(f"✅ Okucia/Akcesoria: skopiowano {renamed}, pominięto {skipped}")
     return renamed
 
+def extract_additional_profiles_from_csv(csv_path, vendor_profile):
+    """
+    Wyciąga profile z sekcji 'Profile dodatkowe' w CSV.
+    
+    Returns:
+        set: Zbiór kodów profili (np. {"K518139", "K120470"})
+    """
+    try:
+        rows = list(csv.reader(open(csv_path, "r", encoding="cp1250", errors="replace"), delimiter=";"))
+    except Exception:
+        rows = list(csv.reader(open(csv_path, "r", encoding="utf-8", errors="ignore"), delimiter=";"))
+    
+    profiles = set()
+    in_additional_section = False
+    
+    for row in rows:
+        r = [clean(c) for c in row]
+        line = ";".join(r)
+        
+        # Wykryj sekcję
+        if re.search(r"Profile\s+dodatkowe", line, re.IGNORECASE):
+            in_additional_section = True
+            continue
+        
+        # Koniec sekcji (następna sekcja lub pusta linia)
+        if in_additional_section and r and r[0] and re.match(r"^(Akcesoria|Okucia|Izolacyjność)", r[0], re.IGNORECASE):
+            in_additional_section = False
+            continue
+        
+        # Parsuj profile w sekcji
+        if in_additional_section:
+            for cell in r:
+                code = vendor_profile.parse_profile_code(cell)
+                if code:
+                    profiles.add(code)
+    
+    return profiles
+
 def main():
     print("=" * 60)
     print("REORGANIZACJA BAZY OBRAZKÓW (NOWA STRUKTURA)")
@@ -815,7 +853,14 @@ def main():
     rename_views(positions, rk_images, rk_images_dir, prefix, OUTPUT_VIEWS_DIR)
     
     print("\n[KROK 2/4] Przetwarzanie profili...")
+    # Profile z HTML
     rename_profiles_from_lp_html(lp_html, lp_images_dir, OUTPUT_PROFILES_DIR, vendor_profile)
+
+    # Profile dodatkowe z CSV
+    additional_profiles = extract_additional_profiles_from_csv(csv_file, vendor_profile)
+    if additional_profiles:
+        print(f"⚠️ Znaleziono {len(additional_profiles)} profili dodatkowych w CSV: {', '.join(sorted(additional_profiles))}")
+        print(f"   Upewnij się, że obrazki są w folderze LP_images.files")
     
     print("\n[KROK 3/4] Parsowanie okuć z CSV...")
     hardware_codes = parse_hardware_from_csv(csv_file, vendor_profile)
