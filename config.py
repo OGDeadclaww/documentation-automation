@@ -40,7 +40,7 @@ AUDIT_LOG = os.path.join(BASE_PATH, "logs", "audit_log.jsonl")
 # REGEX PATTERNS
 # ============================================
 POZ_LINE_RE = re.compile(r"Poz\.\s*(\d+)")
-SECTION_RE = re.compile(r"^(Profile|Akcesoria|Okucia)\b", re.IGNORECASE)
+SECTION_RE = re.compile(r"^(Profile|Profile dodatkowe|Akcesoria|Okucia)\b", re.IGNORECASE)
 
 # ============================================
 # ZNANE SYSTEMY (dla walidacji)

@@ -56,43 +56,62 @@ class VendorProfile:
     PROFILE_RE = None
     HARDWARE_RE = None
     COLOR_TOKEN_RE = None
+    KEY = "generic"
     
     @classmethod
     def parse_profile_code(cls, code_text: str) -> str:
         raise NotImplementedError
     
     @classmethod
-    def parse_hardware_code(cls, code_text: str) -> str:
+    def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:
+        print(f"    DEBUG HW: Parsowanie '{code_text}' z kolorem '{color_suffix}'")
         raise NotImplementedError
 
 class AluProfProfile(VendorProfile):
     NAME = "Aluprof"
+    KEY = "aluprof"
     PROFILE_RE = re.compile(r"\b(K\d{2})\s*(\d{4})\b", re.IGNORECASE)
     
-    # POPRAWIONY REGEX
     HARDWARE_RE = re.compile(
-        r"\b([0-9A-Z]{3,6})\s+(\d{2,4})\s*([A-Z]\d?|[A-Z]{1,2}\d|\d[A-Z])?\b",
+        r"\b([0-9A-Z]{3,6})(?:\s+(\d{1,4}))?\s*/?([A-Z]\d?|[A-Z]{1,2}\d)?\b",
         re.IGNORECASE
     )
     
     @classmethod
     def parse_profile_code(cls, code_text: str) -> str:
+        """
+        Parsuje kod profilu Aluprof.
+        
+        Przykłady:
+            "K51 8143 4R8017" → "K518143"
+            "K51 8395 4R8017" → "K518395"
+            "120 470"         → "120470"  (bez K - zostawia jak jest)
+        """
         t = clean(code_text).upper()
-        m = cls.PROFILE_RE.search(t)
-        if not m:
-            return ""
-        return f"{m.group(1).upper()}{m.group(2)}"
+        
+        # Z prefiksem K (np. "K51 8143")
+        m1 = re.search(r"\bK(\d{2})\s*(\d{4})\b", t)
+        if m1:
+            return f"K{m1.group(1)}{m1.group(2)}"
+        
+        # Bez prefiksu K (np. "120 470")
+        m2 = re.search(r"\b(\d{2,3})\s+(\d{3,4})\b", t)
+        if m2:
+            combined = m2.group(1) + m2.group(2)
+            if 5 <= len(combined) <= 6:
+                return combined
+        
+        return ""
     
     @classmethod
     def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:
         """
-        Parsuje kod okuć Aluprof.
+        Parsuje kod okuć.
         
         Przykłady:
-        - "8000 965 D" → "8000965X" (kolor D)
-        - "8A022 27I4" → "8A02227X" (kolor I4)
-        - "8010 544 B4" → "8010544X" (kolor B4)
-        - "967 D" → "967X" (kolor D)
+            "8000 965 D"   → "8000965X"
+            "8000 2590"    → "80002590"
+            "967 D"        → "967X"
         """
         t = clean(code_text)
         m = cls.HARDWARE_RE.search(t)
@@ -100,22 +119,21 @@ class AluProfProfile(VendorProfile):
             return ""
         
         part1 = m.group(1).upper()
-        part2 = m.group(2)
+        part2 = m.group(2) or ""
         part3 = m.group(3) or ""
         
-        # Usuń litery z part2 (cyfry)
-        part2_clean = re.sub(r"[A-Z]", "", part2)
+        part2_clean = re.sub(r"[A-Z]", "", part2) if part2 else ""
         
-        # Jeśli wykryto kolor GDZIEKOLWIEK
         if part3 or color_suffix:
             return f"{part1}{part2_clean}X"
+        
+        if not part2_clean:
+            return part1
+        elif len(part1) == 4 and len(part2_clean) < 4:
+            return f"{part1}{part2_clean.zfill(4)}"
         else:
-            # Dopasuj długość (stare zachowanie)
-            if len(part1) == 4 and len(part2_clean) < 4:
-                return f"{part1}{part2_clean.zfill(4)}"
             return f"{part1}{part2_clean}"
-
-
+    
 class GenericProfile(VendorProfile):
     NAME = "Inny / Generic"
     PROFILE_RE = re.compile(r"\b([A-Z]\d{2})\s*(\d{3,5})\b", re.IGNORECASE)
@@ -441,7 +459,7 @@ def find_existing_file(images_dir: str, filename_from_html: str):
             return c
     return None
 
-def extract_color_code_from_csv(csv_path):
+#def extract_color_code_from_csv(csv_path):
     """Wykrywa kod koloru z sekcji 'Kolor profili:'"""
     try:
         with open(csv_path, "r", encoding="cp1250", errors="replace") as f:
@@ -532,6 +550,312 @@ def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profi
     os.makedirs(output_dir, exist_ok=True)
     with open(html_path, "r", encoding="utf-8", errors="ignore") as f:
         soup = BeautifulSoup(f.read(), "html.parser")
+    print(f"    DEBUG: Szukam profili w HTML: {html_path}")
+    print(f"    DEBUG: Folder obrazków: {images_dir}")
+    print(f"    DEBUG: Folder wyjściowy: {output_dir}")
+
+    basecode_to_all = defaultdict(set)
+    renamed = 0
+    skipped = 0
+
+    # ═══════════════════════════════════════════════════════════════
+    # NOWA LOGIKA: Buduj mapę kod→obrazek z SĄSIEDNICH wierszy
+    # HTML z Aluprofa ma strukturę:
+    #   <tr> kod profilu </tr>
+    #   <tr> obrazek     </tr>
+    # LUB:
+    #   <tr> kod + obrazek (w tym samym wierszu) </tr>
+    # ═══════════════════════════════════════════════════════════════
+
+    all_rows = soup.find_all("tr")
+    print(f"    DEBUG: Znaleziono {len(all_rows)} wierszy <tr>")
+
+    for row_idx, tr in enumerate(all_rows):
+        img = tr.find("img")
+        tds = tr.find_all("td")
+
+        # ─── SCENARIUSZ A: Kod i obrazek W TYM SAMYM wierszu ───
+        if img:
+            src = img.get("src")
+            if not src:
+                continue
+            old_filename_html = os.path.basename(src)
+            existing_filename = find_existing_file(images_dir, old_filename_html)
+            if not existing_filename:
+                print(f"    ❌ Nie znaleziono pliku: {old_filename_html}")
+                skipped += 1
+                continue
+
+            # Szukaj kodu w komórkach tego wiersza
+            code_text = ""
+            img_td = img.find_parent("td")
+            if img_td in tds:
+                idx = tds.index(img_td)
+                # Szukaj w lewo
+                for j in range(idx - 1, -1, -1):
+                    txt = clean(tds[j].get_text())
+                    if vendor_profile.parse_profile_code(txt):
+                        code_text = txt
+                        break
+                # Szukaj w prawo
+                if not code_text:
+                    for j in range(idx + 1, len(tds)):
+                        txt = clean(tds[j].get_text())
+                        if vendor_profile.parse_profile_code(txt):
+                            code_text = txt
+                            break
+
+            # ─── SCENARIUSZ B: Kod w SĄSIEDNIM wierszu ───
+            if not code_text:
+                # Sprawdź wiersz POWYŻEJ
+                if row_idx > 0:
+                    prev_tr = all_rows[row_idx - 1]
+                    if not prev_tr.find("img"):  # Poprzedni nie ma obrazka
+                        for td in prev_tr.find_all("td"):
+                            txt = clean(td.get_text())
+                            if vendor_profile.parse_profile_code(txt):
+                                code_text = txt
+                                print(f"    🔗 Kod z wiersza powyżej: '{txt}'")
+                                break
+
+                # Sprawdź wiersz PONIŻEJ
+                if not code_text and row_idx + 1 < len(all_rows):
+                    next_tr = all_rows[row_idx + 1]
+                    if not next_tr.find("img"):  # Następny nie ma obrazka
+                        for td in next_tr.find_all("td"):
+                            txt = clean(td.get_text())
+                            if vendor_profile.parse_profile_code(txt):
+                                code_text = txt
+                                print(f"    🔗 Kod z wiersza poniżej: '{txt}'")
+                                break
+
+            base_code = vendor_profile.parse_profile_code(code_text)
+            if not base_code:
+                # Ostatnia szansa - sprawdź 2 wiersze wyżej
+                if row_idx > 1:
+                    prev2_tr = all_rows[row_idx - 2]
+                    if not prev2_tr.find("img"):
+                        for td in prev2_tr.find_all("td"):
+                            txt = clean(td.get_text())
+                            base_code = vendor_profile.parse_profile_code(txt)
+                            if base_code:
+                                print(f"    🔗 Kod z 2 wiersze wyżej: '{txt}'")
+                                break
+
+            if not base_code:
+                row_text = clean(tr.get_text())[:100]
+                print(f"    ⚠️ Nie sparsowano kodu dla: {old_filename_html} (tekst: '{row_text}')")
+                skipped += 1
+                continue
+            else:
+                print(f"    ✓ Profil: {base_code} → {existing_filename}")
+
+            old_path = os.path.join(images_dir, existing_filename)
+            _, ext = os.path.splitext(existing_filename)
+            new_filename = f"{base_code}{ext.lower()}"
+            new_path = os.path.join(output_dir, new_filename)
+            if not os.path.exists(new_path):
+                shutil.copy2(old_path, new_path)
+                renamed += 1
+            basecode_to_all[base_code].add(new_filename)
+
+    print(f"\n✅ Profile: skopiowano {renamed}, pominięto {skipped}")
+
+    # Podsumowanie
+    print(f"\n    📋 Znalezione kody profili:")
+    for code in sorted(basecode_to_all.keys()):
+        print(f"       {code}")
+
+    if ENABLE_CONFLICT_MODE:
+        conflicts_dir = ensure_conflicts_dir(output_dir)
+        moved = 0
+        multi = 0
+        for base_code, names_set in basecode_to_all.items():
+            names = sorted(list(names_set))
+            if len(names) > 1:
+                multi += 1
+                main_name = choose_preferred_filename(names)
+                for fn in names:
+                    if fn == main_name:
+                        continue
+                    src_path = os.path.join(output_dir, fn)
+                    if not os.path.exists(src_path):
+                        continue
+                    dst_path = os.path.join(conflicts_dir, fn)
+                    if os.path.exists(dst_path):
+                        root, ext = os.path.splitext(fn)
+                        k = 2
+                        while True:
+                            alt = f"{root}__dup{k}{ext}"
+                            dst_path = os.path.join(conflicts_dir, alt)
+                            if not os.path.exists(dst_path):
+                                break
+                            k += 1
+                    shutil.move(src_path, dst_path)
+                    moved += 1
+        print(f"✅ Konflikty profili: {multi} kodów miało duplikaty, przeniesiono {moved} do {CONFLICTS_DIR}/")
+    return renamed
+
+#def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profile):
+    if not os.path.exists(html_path):
+        raise FileNotFoundError(f"Brak pliku HTML: {html_path}")
+    if not os.path.isdir(images_dir):
+        raise FileNotFoundError(f"Brak folderu: {images_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+    with open(html_path, "r", encoding="utf-8", errors="ignore") as f:
+        soup = BeautifulSoup(f.read(), "html.parser")
+    print(f"    DEBUG: Szukam profili w HTML: {html_path}")
+    print(f"    DEBUG: Folder obrazków: {images_dir}")
+    print(f"    DEBUG: Folder wyjściowy: {output_dir}")
+
+    basecode_to_all = defaultdict(set)
+    renamed = 0
+    skipped = 0
+    
+    # ═══════════════════════════════════════════════════════════════
+    # NOWY DEBUG: Pokaż WSZYSTKIE wiersze z obrazkami
+    # ═══════════════════════════════════════════════════════════════
+    all_rows = soup.find_all("tr")
+    print(f"\n    DEBUG: Znaleziono {len(all_rows)} wierszy <tr> w HTML")
+    print(f"    DEBUG: Szukam K518143...\n")
+    
+    for row_idx, tr in enumerate(all_rows):
+        # Sprawdź czy gdziekolwiek w wierszu jest "8143"
+        row_text = clean(tr.get_text())
+        if "8143" in row_text:
+            print(f"    🔍 ZNALEZIONO '8143' w wierszu {row_idx}!")
+            print(f"       Pełny tekst wiersza: '{row_text[:200]}'")
+            
+            # Pokaż wszystkie <td>
+            tds = tr.find_all("td")
+            for td_idx, td in enumerate(tds):
+                td_text = clean(td.get_text())
+                has_img = "📷" if td.find("img") else "  "
+                print(f"       TD[{td_idx}] {has_img}: '{td_text}'")
+            
+            # Sprawdź czy jest obrazek
+            img = tr.find("img")
+            if img:
+                print(f"       IMG src: {img.get('src', 'BRAK')}")
+            else:
+                print(f"       ❌ BRAK <img> w tym wierszu!")
+            print()
+    # ═══════════════════════════════════════════════════════════════
+    
+    for tr in soup.find_all("tr"):
+        img = tr.find("img")
+        if not img:
+            continue
+        src = img.get("src")
+        if not src:
+            continue
+        old_filename_html = os.path.basename(src)
+        existing_filename = find_existing_file(images_dir, old_filename_html)
+        if not existing_filename:
+            print(f"    ❌ Nie znaleziono: {old_filename_html}")
+            skipped += 1
+            continue
+        tds = tr.find_all("td")
+        img_td = img.find_parent("td")
+        code_text = ""
+        if img_td in tds:
+            idx = tds.index(img_td)
+            
+            # ═══════════════════════════════════════════════════════
+            # DEBUG: Pokaż co widzi parser dla każdego obrazka
+            # ═══════════════════════════════════════════════════════
+            print(f"    --- Obrazek: {old_filename_html} ---")
+            for j, td in enumerate(tds):
+                marker = " ← IMG" if j == idx else ""
+                td_text = clean(td.get_text())
+                parse_result = vendor_profile.parse_profile_code(td_text)
+                print(f"      TD[{j}]: '{td_text}' → parse: '{parse_result}'{marker}")
+            # ═══════════════════════════════════════════════════════
+            
+            for j in range(idx - 1, -1, -1):
+                txt = clean(tds[j].get_text())
+                if vendor_profile.parse_profile_code(txt):
+                    code_text = txt
+                    break
+            if not code_text:
+                for j in range(idx + 1, len(tds)):
+                    txt = clean(tds[j].get_text())
+                    if vendor_profile.parse_profile_code(txt):
+                        code_text = txt
+                        break
+        base_code = vendor_profile.parse_profile_code(code_text)
+        if not base_code:
+            print(f"    ⚠️ Nie sparsowano kodu z: '{code_text}'")
+            skipped += 1
+            continue
+        else:
+            print(f"    ✓ Znaleziono profil: {base_code}")
+        old_path = os.path.join(images_dir, existing_filename)
+        _, ext = os.path.splitext(existing_filename)
+        new_filename = f"{base_code}{ext.lower()}"
+        new_path = os.path.join(output_dir, new_filename)
+        if not os.path.exists(new_path):
+            shutil.copy2(old_path, new_path)
+            renamed += 1
+        basecode_to_all[base_code].add(new_filename)
+    
+    print(f"\n✅ Profile: skopiowano {renamed}, pominięto {skipped}")
+    
+    # ═══════════════════════════════════════════════════════════════
+    # PODSUMOWANIE: Pokaż wszystkie znalezione kody
+    # ═══════════════════════════════════════════════════════════════
+    print(f"\n    📋 Wszystkie znalezione kody profili:")
+    for code in sorted(basecode_to_all.keys()):
+        print(f"       {code}")
+    
+    expected = ["K518143", "K518395", "K518139"]
+    missing = [e for e in expected if e not in basecode_to_all]
+    if missing:
+        print(f"\n    ❌ BRAKUJĄCE kody: {', '.join(missing)}")
+    # ═══════════════════════════════════════════════════════════════
+    
+    if ENABLE_CONFLICT_MODE:
+        conflicts_dir = ensure_conflicts_dir(output_dir)
+        moved = 0
+        multi = 0
+        for base_code, names_set in basecode_to_all.items():
+            names = sorted(list(names_set))
+            if len(names) > 1:
+                multi += 1
+                main_name = choose_preferred_filename(names)
+                for fn in names:
+                    if fn == main_name:
+                        continue
+                    src_path = os.path.join(output_dir, fn)
+                    if not os.path.exists(src_path):
+                        continue
+                    dst_path = os.path.join(conflicts_dir, fn)
+                    if os.path.exists(dst_path):
+                        root, ext = os.path.splitext(fn)
+                        k = 2
+                        while True:
+                            alt = f"{root}__dup{k}{ext}"
+                            dst_path = os.path.join(conflicts_dir, alt)
+                            if not os.path.exists(dst_path):
+                                break
+                            k += 1
+                    shutil.move(src_path, dst_path)
+                    moved += 1
+        print(f"✅ Konflikty profili: {multi} kodów miało duplikaty, przeniesiono {moved} do {CONFLICTS_DIR}/")
+    return renamed
+
+#def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profile):
+    if not os.path.exists(html_path):
+        raise FileNotFoundError(f"Brak pliku HTML: {html_path}")
+    if not os.path.isdir(images_dir):
+        raise FileNotFoundError(f"Brak folderu: {images_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+    with open(html_path, "r", encoding="utf-8", errors="ignore") as f:
+        soup = BeautifulSoup(f.read(), "html.parser")
+    print(f"    DEBUG: Szukam profili w HTML: {html_path}")
+    print(f"    DEBUG: Folder obrazków: {images_dir}")
+    print(f"    DEBUG: Folder wyjściowy: {output_dir}")
+
     basecode_to_all = defaultdict(set)
     renamed = 0
     skipped = 0
@@ -545,6 +869,7 @@ def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profi
         old_filename_html = os.path.basename(src)
         existing_filename = find_existing_file(images_dir, old_filename_html)
         if not existing_filename:
+            print(f"    ❌ Nie znaleziono: {old_filename_html}")
             skipped += 1
             continue
         tds = tr.find_all("td")
@@ -565,8 +890,11 @@ def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profi
                         break
         base_code = vendor_profile.parse_profile_code(code_text)
         if not base_code:
+            print(f"    ⚠️ Nie sparsowano kodu z: '{code_text}'")
             skipped += 1
             continue
+        else:
+            print(f"    ✓ Znaleziono profil: {base_code}")
         old_path = os.path.join(images_dir, existing_filename)
         _, ext = os.path.splitext(existing_filename)
         new_filename = f"{base_code}{ext.lower()}"
@@ -606,8 +934,14 @@ def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profi
         print(f"✅ Konflikty profili: {multi} kodów miało duplikaty, przeniesiono {moved} do {CONFLICTS_DIR}/")
     return renamed
 
-def parse_hardware_from_csv(csv_path, vendor_profile):
-    color_code = extract_color_code_from_csv(csv_path)
+def parse_hardware_from_csv(csv_path, vendor_profile, color_code=None):
+    color_codes = extract_color_codes_from_csv(csv_path)
+    if not color_codes:
+        color_code = None
+    elif len(color_codes) == 1:
+        color_code = list(color_codes)[0]
+    else:
+        print(f"⚠️ Wiele kodów kolorów w pliku CSV: {color_codes}")
     
     try:
         rows = list(csv.reader(open(csv_path, "r", encoding="cp1250", errors="replace"), delimiter=";"))
@@ -658,7 +992,7 @@ def parse_hardware_from_csv(csv_path, vendor_profile):
     return hardware_codes
 
 
-def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile):
+def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile, color_code=None):
     if not os.path.exists(html_path):
         raise FileNotFoundError(f"Brak pliku HTML: {html_path}")
     if not os.path.isdir(images_dir):
@@ -692,7 +1026,7 @@ def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile):
                     if vendor_profile.parse_hardware_code(txt):
                         code_text = txt
                         break
-        code_hw = vendor_profile.parse_hardware_code(code_text)
+        code_hw = vendor_profile.parse_hardware_code(code_text, color_suffix=None)
         if not code_hw:
             continue
         tmp[code_hw].add(real_fn)
@@ -762,6 +1096,198 @@ def extract_additional_profiles_from_csv(csv_path, vendor_profile):
     
     return profiles
 
+#def select_primary_color(detected_colors):
+    """Dialog wyboru głównego koloru z wykrytych"""
+    if not detected_colors:
+        return None
+    
+    if len(detected_colors) == 1:
+        root = tk.Tk()
+        root.withdraw()
+        confirm = messagebox.askyesno(
+            "Potwierdzenie koloru",
+            f"Wykryto kolor: {detected_colors[0]}\n\n"
+            f"Czy to główny kolor projektu?\n\n"
+            f"TAK - użyj {detected_colors[0]}\n"
+            f"NIE - wpisz inny kod ręcznie"
+        )
+        if confirm:
+            print(f"    ✅ Użyto koloru: {detected_colors[0]}")
+            return detected_colors[0]
+        else:
+            manual = simpledialog.askstring("Kod koloru", "Wpisz kod koloru (np. B4, D):")
+            if manual:
+                print(f"    ✅ Ręczny kolor: {manual.upper()}")
+                return manual.strip().upper()
+            return None
+    
+    # Wiele kolorów - wybór z listy
+    choice_window = tk.Toplevel()
+    choice_window.title("Wybierz główny kolor")
+    choice_window.geometry("450x400")
+    
+    tk.Label(
+        choice_window,
+        text=f"Wykryto {len(detected_colors)} kolorów:",
+        font=("Arial", 12, "bold")
+    ).pack(pady=10)
+    
+    tk.Label(
+        choice_window,
+        text="Wybierz GŁÓWNY kolor projektu\n(dla okuć i akcesoriów):",
+        font=("Arial", 10),
+        fg="#666"
+    ).pack(pady=5)
+    
+    selected_color = tk.StringVar(value=detected_colors[0])
+    
+    for color in detected_colors:
+        tk.Radiobutton(
+            choice_window,
+            text=f"  {color}",
+            variable=selected_color,
+            value=color,
+            font=("Arial", 11)
+        ).pack(anchor="w", padx=40, pady=8)
+    
+    tk.Label(
+        choice_window,
+        text="Lub wpisz inny kod:",
+        font=("Arial", 9),
+        fg="#999"
+    ).pack(pady=(15, 5))
+    
+    manual_entry = tk.Entry(choice_window, font=("Arial", 10), width=15)
+    manual_entry.pack(pady=5)
+    
+    result = {"color": None}
+    
+    def on_confirm():
+        manual_value = manual_entry.get().strip().upper()
+        if manual_value:
+            result["color"] = manual_value
+            print(f"    ✅ Ręczny kolor: {manual_value}")
+        else:
+            result["color"] = selected_color.get()
+            print(f"    ✅ Wybrany kolor: {result['color']}")
+        choice_window.destroy()
+    
+    def on_cancel():
+        print("    ⚠️ Pominięto wybór koloru")
+        choice_window.destroy()
+    
+    tk.Button(
+        choice_window,
+        text="Potwierdź",
+        command=on_confirm,
+        font=("Arial", 10),
+        bg="#4CAF50",
+        fg="white",
+        width=15
+    ).pack(side="left", padx=20, pady=20)
+    
+    tk.Button(
+        choice_window,
+        text="Pomiń (bez koloru)",
+        command=on_cancel,
+        font=("Arial", 10),
+        bg="#f44336",
+        fg="white",
+        width=15
+    ).pack(side="right", padx=20, pady=20)
+    
+    choice_window.wait_window()
+    return result["color"]
+
+def confirm_detected_colors(csv_path):
+    """
+    Wykrywa kolory z CSV i pokazuje okno informacyjne.
+    Użytkownik POTWIERDZA (nie wybiera głównego).
+    """
+    # Wykryj kolory
+    detected_colors = extract_color_codes_from_csv(csv_path)
+    
+    if not detected_colors:
+        # Brak kolorów - pomiń dialog
+        return
+    
+    # Pokaż okno informacyjne
+    root = tk.Tk()
+    root.withdraw()
+    
+    colors_text = ", ".join(detected_colors)
+    
+    messagebox.showinfo(
+        "Wykryte kolory okuć",
+        f"Projekt zawiera {len(detected_colors)} kolory:\n\n"
+        f"🎨 {colors_text}\n\n"
+        f"Wszystkie okucia zostaną zapisane z sufiksem 'X'\n"
+        f"(bez względu na kolor)."
+    )
+    
+    print(f"    🎨 Kolory w projekcie: {colors_text}")
+
+
+def extract_color_codes_from_csv(csv_path):
+    """
+    Wykrywa WSZYSTKIE kody kolorów z wiersza 'Kolor profili:'.
+    Obsługuje format CSV z kolorami rozdzielonymi średnikami.
+    
+    Przykład:
+    "B4 [brązowy];I4 [czarny];D [srebrny]" → ["B4", "I4", "D"]
+    """
+    try:
+        with open(csv_path, "r", encoding="cp1250", errors="replace") as f:
+            reader = list(csv.reader(f, delimiter=";"))
+    except Exception:
+        with open(csv_path, "r", encoding="utf-8", errors="ignore") as f:
+            reader = list(csv.reader(f, delimiter=";"))
+    
+    colors = []
+    
+    for i, row in enumerate(reader):
+        if any("Kolor profili:" in str(cell) for cell in row):
+            for cell in row:
+                if not cell or "Kolor profili:" in cell:
+                    continue
+                
+                cell_upper = str(cell).upper()
+                
+                # Wyczyść znaki specjalne i polskie opisy
+                cell_clean = re.sub(r'[\^\\[\]\'"\(\)*]', ' ', cell_upper)
+                cell_clean = re.sub(r'\b(CZARNY|BRĄZOWY|ANODA|SREBRNY|SREBRNA|BIAŁY|MAT|MATOWY|LAKIEROWANY|NIETYPOWY|STANDARD)\b', '', cell_clean)
+                cell_clean = cell_clean.strip()
+                
+                # KLUCZOWE: Split po średniku
+                segments = [s.strip() for s in cell_clean.split(';') if s.strip()]
+                
+                for segment in segments:
+                    # Pattern 1: Litera + cyfry (B4, I4, E6)
+                    matches = re.findall(r'\b([A-Z]\d{1,2})\b', segment)
+                    for m in matches:
+                        if m not in ["X", "X1", "Y", "Y1"]:
+                            colors.append(m)
+                    
+                    # Pattern 2: Pojedyncza litera (D, E, F, G, H)
+                    matches = re.findall(r'(?:^|\s)([DBEFGH])(?:\s|$)', segment)
+                    colors.extend(matches)
+                    
+                    # Pattern 3: ST (jeśli chcesz zachować)
+                    # Odkomentuj jeśli ST to kod koloru:
+                    # if 'ST' in segment and segment.strip() == 'ST':
+                    #     colors.append('ST')
+    
+    # Usuń duplikaty zachowując kolejność
+    seen = set()
+    unique = [c for c in colors if not (c in seen or seen.add(c))]
+    
+    if unique:
+        print(f"    🎨 Wykryte kody kolorów: {', '.join(unique)}")
+    else:
+        print(f"    ⚠️ Nie wykryto kodów kolorów")
+    
+    return unique
+
 def main():
     print("=" * 60)
     print("REORGANIZACJA BAZY OBRAZKÓW (NOWA STRUKTURA)")
@@ -774,7 +1300,7 @@ def main():
     if not vendor_profile:
         messagebox.showerror("Błąd", "Nie wybrano dostawcy.")
         return
-    vendor_key = "aluprof"
+    vendor_key = vendor_profile.KEY
     print(f"✓ Wybrano: {vendor_profile.NAME}\n")
     
     print("[1/7] Wybierz projekt...")
@@ -796,6 +1322,16 @@ def main():
     if not csv_file:
         return
     print(f"✓ Wybrano: {os.path.basename(csv_file)}\n")
+    print("    Wykrywanie koloru projektu...")
+    confirm_detected_colors(csv_file)
+    #detected_colors = extract_color_codes_from_csv(csv_file)  # Wywołaj NOWĄ funkcję
+    #if detected_colors:
+     #   print(f"    ✓ Wykryto {len(detected_colors)} kolory: {', '.join(detected_colors)}")
+        #project_color = select_primary_color(detected_colors)  # Dialog wyboru
+    #else:
+     #   print("    ⚠️ Nie wykryto koloru - okucia bez sufiksu X")
+      #  project_color = None
+    #print(f"    → Kolor projektu: {project_color or 'BRAK'}\n")
     
     print("[4/7] Wybierz plik RK_images.html...")
     rk_html = select_file("HTML", "Wybierz RK_images.html")
@@ -863,11 +1399,12 @@ def main():
         print(f"   Upewnij się, że obrazki są w folderze LP_images.files")
     
     print("\n[KROK 3/4] Parsowanie okuć z CSV...")
+    #print(f"    DEBUG: Przekazuję kolor: {project_color}")
     hardware_codes = parse_hardware_from_csv(csv_file, vendor_profile)
     print(f"✓ Znaleziono {len(hardware_codes)} kodów okuć")
     
     print("\n[KROK 4/4] Przetwarzanie okuć...")
-    code_to_srcfile = build_hardware_mapping_from_lp_html(lp_html, lp_images_dir, vendor_profile)
+    code_to_srcfile = build_hardware_mapping_from_lp_html(lp_html, lp_images_dir, vendor_profile)  # ← Dodaj color_code
     rename_hardware(hardware_codes, code_to_srcfile, lp_images_dir, OUTPUT_HARDWARE_DIR)
     
     log_audit("IMAGES_PROCESSED", {"project": project_name, "vendor": vendor_key, "system": system, "positions": len(positions), "hardware": len(hardware_codes)})
