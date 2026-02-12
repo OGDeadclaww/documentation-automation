@@ -10,25 +10,23 @@ import json
 import getpass
 import socket
 from datetime import datetime
-
-# --- KONFIGURACJA - NOWA STRUKTURA ---
-BASE_PATH = r"Z:\Pawel_Pisarski\Dokumentacja"
-PROJECTS_IMAGES = os.path.join(BASE_PATH, "projects_images")
-IMAGES_DB = os.path.join(BASE_PATH, "images_db")
-
-# Będzie ustawione dynamicznie w main()
-OUTPUT_VIEWS_DIR = None
-OUTPUT_PROFILES_DIR = None  
-OUTPUT_HARDWARE_DIR = None
-
-CONFLICTS_DIR = "_conflicts"
-PREFERRED_EXT_ORDER = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"]
-ENABLE_CONFLICT_MODE = True
-MAX_PREFIX_LENGTH = 25
-
-# --- BEZPIECZEŃSTWO ---
-AUTH_FILE = os.path.join(BASE_PATH, "config", "authorized_users.json")
-AUDIT_LOG = os.path.join(BASE_PATH, "logs", "audit_log.jsonl")
+from config import (
+    BASE_PATH,
+    PROJECTS_IMAGES,
+    IMAGES_DB,
+    OUTPUT_VIEWS_DIR,
+    OUTPUT_PROFILES_DIR,
+    OUTPUT_HARDWARE_DIR,
+    CONFLICTS_DIR,
+    ENABLE_CONFLICT_MODE,
+    PREFERRED_EXT_ORDER,
+    MAX_PREFIX_LENGTH,
+    AUTH_FILE,
+    AUDIT_LOG,
+    POZ_LINE_RE,
+    SECTION_RE,
+    KNOWN_SYSTEMS
+)
 
 def check_authorization():
     current_user = getpass.getuser()
@@ -68,10 +66,14 @@ class VendorProfile:
         raise NotImplementedError
 
 class AluProfProfile(VendorProfile):
-    NAME = "Aluprof / MB-CAD"
+    NAME = "Aluprof"
     PROFILE_RE = re.compile(r"\b(K\d{2})\s*(\d{4})\b", re.IGNORECASE)
-    HARDWARE_RE = re.compile(r"\b([0-9A-H]{3,6})\s+(\d{1,4}[A-Z]?\d*)\b", re.IGNORECASE)
-    COLOR_TOKEN_RE = re.compile(r"^(?:[A-Z]\d|[0-9])[A-Z0-9]{1,5}$", re.IGNORECASE)
+    
+    # POPRAWIONY REGEX
+    HARDWARE_RE = re.compile(
+        r"\b([0-9A-Z]{3,6})\s+(\d{2,4})\s*([A-Z]\d?|[A-Z]{1,2}\d|\d[A-Z])?\b",
+        re.IGNORECASE
+    )
     
     @classmethod
     def parse_profile_code(cls, code_text: str) -> str:
@@ -82,22 +84,37 @@ class AluProfProfile(VendorProfile):
         return f"{m.group(1).upper()}{m.group(2)}"
     
     @classmethod
-    def parse_hardware_code(cls, code_text: str) -> str:
+    def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:
+        """
+        Parsuje kod okuć Aluprof.
+        
+        Przykłady:
+        - "8000 965 D" → "8000965X" (kolor D)
+        - "8A022 27I4" → "8A02227X" (kolor I4)
+        - "8010 544 B4" → "8010544X" (kolor B4)
+        - "967 D" → "967X" (kolor D)
+        """
         t = clean(code_text)
         m = cls.HARDWARE_RE.search(t)
         if not m:
             return ""
-        part1 = m.group(1)
+        
+        part1 = m.group(1).upper()
         part2 = m.group(2)
-        has_color_suffix = bool(re.search(r"[A-Z]", part2))
-        if has_color_suffix:
-            part2_clean = re.sub(r"[A-Z]+", "", part2)
+        part3 = m.group(3) or ""
+        
+        # Usuń litery z part2 (cyfry)
+        part2_clean = re.sub(r"[A-Z]", "", part2)
+        
+        # Jeśli wykryto kolor GDZIEKOLWIEK
+        if part3 or color_suffix:
             return f"{part1}{part2_clean}X"
         else:
-            if len(part1) == 4 and part2.isdigit() and len(part2) < 4:
-                return f"{part1}{part2.zfill(4)}"
-            else:
-                return f"{part1}{part2}"
+            # Dopasuj długość (stare zachowanie)
+            if len(part1) == 4 and len(part2_clean) < 4:
+                return f"{part1}{part2_clean.zfill(4)}"
+            return f"{part1}{part2_clean}"
+
 
 class GenericProfile(VendorProfile):
     NAME = "Inny / Generic"
@@ -133,9 +150,6 @@ VENDOR_PROFILES = {
     "aliplast": AluProfProfile,
     "generic": GenericProfile,
 }
-
-POZ_LINE_RE = re.compile(r"Poz\.\s*(\d+)")
-SECTION_RE = re.compile(r"^(Profile|Akcesoria|Okucia)\b", re.IGNORECASE)
 
 # --- GUI FUNKCJE ---
 def select_vendor():
@@ -249,16 +263,18 @@ def extract_system_from_csv(csv_path):
             reader = list(csv.reader(f, delimiter=";"))
     
     for i, row in enumerate(reader):
-        if any("System:" in cell for cell in row):
-            if i + 1 < len(reader) and len(reader[i + 1]) > 3:
-                raw_system = reader[i + 1][3].strip()
-                if raw_system:
-                    systems = raw_system.split(";")
-                    system = systems[0] if systems else raw_system
-                    system_clean = re.sub(r"\s+(HI|SI|EI|HS).*", "", system, flags=re.IGNORECASE).strip().lower()
-                    system_clean = re.sub(r"\s+", "", system_clean)
-                    return system_clean
+        if any("System:" in str(cell) for cell in row):
+            # Sprawdź WSZYSTKIE komórki w następnym wierszu
+            if i + 1 < len(reader):
+                for cell in reader[i + 1]:
+                    cell_clean = clean(cell).upper()
+                    if re.match(r"MB-\d+", cell_clean, re.IGNORECASE):
+                        # Usuń warianty (HI/SI/EI)
+                        system_clean = re.sub(r"\s*(HI|SI|EI|HS).*", "", cell_clean, flags=re.IGNORECASE).strip().lower()
+                        system_clean = re.sub(r"\s+", "", system_clean)
+                        return system_clean
     return None
+
 
 def validate_system_name(system, known_systems):
     if not system:
@@ -318,6 +334,26 @@ def find_existing_file(images_dir: str, filename_from_html: str):
         if os.path.exists(os.path.join(images_dir, c)):
             return c
     return None
+
+def extract_color_code_from_csv(csv_path):
+    """Wykrywa kod koloru z sekcji 'Kolor profili:'"""
+    try:
+        with open(csv_path, "r", encoding="cp1250", errors="replace") as f:
+            reader = list(csv.reader(f, delimiter=";"))
+    except Exception:
+        with open(csv_path, "r", encoding="utf-8", errors="ignore") as f:
+            reader = list(csv.reader(f, delimiter=";"))
+    
+    for i, row in enumerate(reader):
+        if any("Kolor profili:" in str(cell) for cell in row):
+            for j in range(i, min(i + 3, len(reader))):
+                for cell in reader[j]:
+                    cell_clean = clean(cell).upper()
+                    if re.match(r"^[A-Z0-9]{1,3}$", cell_clean) and cell_clean not in ["X", "Y", "KOLOR", "PROFILI"]:
+                        print(f"✓ Wykryto kod koloru: {cell_clean}")
+                        return cell_clean
+    return None
+
 
 def choose_preferred_filename(filenames: list) -> str:
     if not filenames:
@@ -465,45 +501,56 @@ def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profi
     return renamed
 
 def parse_hardware_from_csv(csv_path, vendor_profile):
+    color_code = extract_color_code_from_csv(csv_path)
+    
     try:
         rows = list(csv.reader(open(csv_path, "r", encoding="cp1250", errors="replace"), delimiter=";"))
     except Exception:
         rows = list(csv.reader(open(csv_path, "r", encoding="utf-8", errors="ignore"), delimiter=";"))
+    
     hardware_codes = {}
     current_pos = None
     current_section = None
+    
     for i in range(len(rows)):
         r = [clean(c) for c in rows[i]]
         line = ";".join(r)
+        
         mpos = POZ_LINE_RE.search(line)
         if mpos and "MB-" in line:
             current_pos = mpos.group(1)
             current_section = None
             continue
+        
         if not current_pos:
             continue
+        
         if r and r[0] and SECTION_RE.match(r[0]):
             sec = SECTION_RE.match(r[0]).group(1).capitalize()
             current_section = sec if sec in ["Akcesoria", "Okucia"] else None
             continue
+        
         if current_section not in ["Akcesoria", "Okucia"]:
             continue
-        if any(c.lower().startswith("kod:") for c in r):
-            pass
+        
         joined = " ".join([x for x in r if x])
-        code_hw = vendor_profile.parse_hardware_code(joined)
+        code_hw = vendor_profile.parse_hardware_code(joined, color_suffix=color_code)
         if not code_hw:
             continue
+        
         desc = ""
         if i + 1 < len(rows):
             next_row = [clean(c) for c in rows[i + 1]]
             next_desc = next_row[0] if next_row else ""
-            if next_desc and not vendor_profile.parse_hardware_code(next_desc):
+            if next_desc and not vendor_profile.parse_hardware_code(next_desc, color_suffix=color_code):
                 desc = next_desc
+        
         if code_hw not in hardware_codes:
             hardware_codes[code_hw] = {"desc": desc, "positions": set()}
         hardware_codes[code_hw]["positions"].add(current_pos)
+    
     return hardware_codes
+
 
 def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile):
     if not os.path.exists(html_path):

@@ -1,0 +1,33 @@
+# .gitignore
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Config (może zawierać wrażliwe dane)
+config/authorized_users.json
+audit_log.jsonl
+
+# Backup
+*_BACKUP_*.py
+
+# OS
+.DS_Store
+Thumbs.db
