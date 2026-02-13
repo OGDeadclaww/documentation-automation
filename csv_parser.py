@@ -189,31 +189,9 @@ def extract_color_codes_from_csv(csv_path: str) -> list:
 def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
     """
     Parsuje kody okuć i akcesoriów z CSV.
-    Przechodzi przez sekcje "Akcesoria" i "Okucia" każdej pozycji.
-    
-    Args:
-        csv_path: Ścieżka do pliku CSV
-        vendor_profile: Klasa dostawcy (np. AluProfProfile)
-    
-    Returns:
-        dict: {kod_okucia: {"desc": opis, "positions": {numery_pozycji}}}
-    
-    Przykład wyniku:
-        {
-            "8000965X":  {"desc": "Klamka okienna", "positions": {"1", "2"}},
-            "80004431":  {"desc": "Uszczelka",      "positions": {"1"}},
-        }
+    X dodawany TYLKO gdy okucie ma kolor w swoim kodzie,
+    NIE globalnie na podstawie koloru projektu.
     """
-    color_codes = extract_color_codes_from_csv(csv_path)
-
-    if not color_codes:
-        color_code = None
-    elif len(color_codes) == 1:
-        color_code = list(color_codes)[0]
-    else:
-        print(f"⚠️ Wiele kodów kolorów w pliku CSV: {color_codes}")
-        color_code = None
-
     rows = _read_csv_rows(csv_path)
 
     hardware_codes = {}
@@ -224,7 +202,6 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
         r = [clean(c) for c in row]
         line = ";".join(r)
 
-        # Nowa pozycja
         mpos = POZ_LINE_RE.search(line)
         if mpos and "MB-" in line:
             current_pos = mpos.group(1)
@@ -234,7 +211,6 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
         if not current_pos:
             continue
 
-        # Nowa sekcja
         if r and r[0] and SECTION_RE.match(r[0]):
             sec = SECTION_RE.match(r[0]).group(1).capitalize()
             current_section = sec if sec in ("Akcesoria", "Okucia") else None
@@ -243,19 +219,18 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
         if current_section not in ("Akcesoria", "Okucia"):
             continue
 
-        # Parsuj kod okucia
+        # Parsuj BEZ wymuszania koloru - niech parser sam wykryje
         joined = " ".join(x for x in r if x)
-        code_hw = vendor_profile.parse_hardware_code(joined, color_suffix=color_code)
+        code_hw = vendor_profile.parse_hardware_code(joined, color_suffix=None)
         if not code_hw:
             continue
 
-        # Opis z następnego wiersza
         desc = ""
         if i + 1 < len(rows):
             next_row = [clean(c) for c in rows[i + 1]]
             next_desc = next_row[0] if next_row else ""
             if next_desc and not vendor_profile.parse_hardware_code(
-                next_desc, color_suffix=color_code
+                next_desc, color_suffix=None
             ):
                 desc = next_desc
 
@@ -263,12 +238,6 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
             hardware_codes[code_hw] = {"desc": desc, "positions": set()}
         hardware_codes[code_hw]["positions"].add(current_pos)
 
-    unique_codes = sorted(set(hardware_codes))
-    print("DEBUG: kody okuć wykryte w CSV (unikalne):")
-    for code in unique_codes:
-        print("   -", code)
-    print(f"DEBUG: razem {len(unique_codes)} kodów")
-    
     return hardware_codes
 
 

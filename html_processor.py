@@ -462,31 +462,16 @@ def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile):
 
 
 def rename_hardware(hardware_codes, code_to_srcfile, srcdir, output_dir):
-    """
-    Kopiuje obrazki okuć z nowymi nazwami.
-    Dopasowuje kody z X i bez X (CSV ma kolor, HTML nie).
-    
-    Args:
-        hardware_codes: Słownik kodów z parse_hardware_from_csv
-        code_to_srcfile: Mapowanie kod→plik z build_hardware_mapping
-        srcdir: Folder źródłowy z obrazkami
-        output_dir: Folder docelowy
-    
-    Returns:
-        int: Liczba skopiowanych plików
-    """
     os.makedirs(output_dir, exist_ok=True)
     renamed = 0
     skipped = 0
 
     for code_hw in hardware_codes.keys():
-        # Szukaj dokładnego dopasowania
         src_fn = code_to_srcfile.get(code_hw)
 
-        # Fallback: kod bez X → z X (lub odwrotnie)
+        # Fallback: kod z X ↔ bez X
         if not src_fn and code_hw.endswith("X"):
-            base_code = code_hw[:-1]
-            src_fn = code_to_srcfile.get(base_code)
+            src_fn = code_to_srcfile.get(code_hw[:-1])
         elif not src_fn:
             src_fn = code_to_srcfile.get(code_hw + "X")
 
