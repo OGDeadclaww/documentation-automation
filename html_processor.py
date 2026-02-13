@@ -370,23 +370,18 @@ def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profi
 # ============================================
 
 def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile):
-    """
-    Buduje mapę: kod_okucia → nazwa_pliku_obrazka.
-    
-    Args:
-        html_path: Ścieżka do LP_images.html
-        images_dir: Folder z obrazkami
-        vendor_profile: Klasa dostawcy
-    
-    Returns:
-        dict: {kod: nazwa_pliku} (np. {"8000965X": "img14.jpg"})
-    """
     if not os.path.isdir(images_dir):
         raise FileNotFoundError(f"Brak folderu: {images_dir}")
 
     soup = _parse_html(html_path)
     tmp = defaultdict(set)
     parse_fn = vendor_profile.parse_hardware_code
+
+    # ═══════════════════════════════════════════════
+    # DEBUG: Pokaż co widzi parser
+    # ═══════════════════════════════════════════════
+    print(f"\n    DEBUG HW mapping: Parsowanie {html_path}")
+    found_any = False
 
     for tr in soup.find_all("tr"):
         img = tr.find("img")
@@ -401,13 +396,21 @@ def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile):
         if not real_fn:
             continue
 
-        # Szukaj kodu w komórkach
         tds = tr.find_all("td")
         img_td = img.find_parent("td")
         code_text = ""
 
         if img_td in tds:
             idx = tds.index(img_td)
+
+            # DEBUG: Pokaż wszystkie komórki
+            for j, td in enumerate(tds):
+                td_text = clean(td.get_text())
+                if td_text:
+                    marker = " ← IMG" if j == idx else ""
+                    hw_result = parse_fn(td_text)
+                    print(f"      TD[{j}]: '{td_text}' → hw: '{hw_result}'{marker}")
+
             for j in range(idx - 1, -1, -1):
                 txt = clean(tds[j].get_text())
                 if parse_fn(txt):
@@ -421,15 +424,39 @@ def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile):
                         break
 
         code_hw = parse_fn(code_text, color_suffix=None)
-        if not code_hw:
-            continue
 
-        tmp[code_hw].add(real_fn)
+        if code_hw:
+            found_any = True
+            print(f"    ✓ HW: {code_hw} → {real_fn}")
+            tmp[code_hw].add(real_fn)
+        else:
+            row_text = clean(tr.get_text())[:80]
+            if row_text.strip():
+                print(f"    ⚠️ Nie sparsowano HW: '{row_text}'")
+    # ═══════════════════════════════════════════════
 
-    # Wybierz najlepszy plik dla każdego kodu
+    if not found_any:
+        print(f"\n    ❌ NIE ZNALEZIONO ŻADNYCH OKUĆ W HTML!")
+        print(f"    Sprawdź czy LP_images.html zawiera okucia")
+
     out = {}
     for code_hw, files in tmp.items():
         out[code_hw] = choose_preferred_filename(list(files))
+
+    # DEBUG: Pokaż mapowanie
+    print(f"\n    DEBUG HW mapping wynik:")
+    for code, fn in sorted(out.items()):
+        print(f"       {code} → {fn}")
+    if not out:
+        print(f"       (pusto)")
+
+    # DEBUG: Porównaj z kodami z CSV
+    print(f"\n    DEBUG: Kody z CSV vs kody z HTML:")
+    csv_codes = ["80122214X", "80122224X", "80322073X", "80322092X",
+                 "80322102X", "80379931X", "87122404X"]
+    for code in csv_codes:
+        status = "✅" if code in out else "❌ BRAK"
+        print(f"       {code}: {status}")
 
     return out
 
@@ -437,6 +464,7 @@ def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile):
 def rename_hardware(hardware_codes, code_to_srcfile, srcdir, output_dir):
     """
     Kopiuje obrazki okuć z nowymi nazwami.
+    Dopasowuje kody z X i bez X (CSV ma kolor, HTML nie).
     
     Args:
         hardware_codes: Słownik kodów z parse_hardware_from_csv
@@ -452,8 +480,18 @@ def rename_hardware(hardware_codes, code_to_srcfile, srcdir, output_dir):
     skipped = 0
 
     for code_hw in hardware_codes.keys():
+        # Szukaj dokładnego dopasowania
         src_fn = code_to_srcfile.get(code_hw)
+
+        # Fallback: kod bez X → z X (lub odwrotnie)
+        if not src_fn and code_hw.endswith("X"):
+            base_code = code_hw[:-1]
+            src_fn = code_to_srcfile.get(base_code)
+        elif not src_fn:
+            src_fn = code_to_srcfile.get(code_hw + "X")
+
         if not src_fn:
+            print(f"    ⚠️ Brak obrazka dla: {code_hw}")
             skipped += 1
             continue
 
@@ -468,6 +506,7 @@ def rename_hardware(hardware_codes, code_to_srcfile, srcdir, output_dir):
 
         if not os.path.exists(new_path):
             shutil.copy2(src_path, new_path)
+            print(f"    ✓ {code_hw} → {new_filename}")
             renamed += 1
 
     print(f"✅ Okucia/Akcesoria: skopiowano {renamed}, pominięto {skipped}")
