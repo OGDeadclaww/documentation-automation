@@ -115,12 +115,14 @@ class TestAdditionalProfiles:
         csv = write_csv(tmp_dir,
             "Profile dodatkowe;\n"
             "K51 8139;;\n"
-            "K12 0470;;\n"
+            "120 470;;\n"
+            "K41 PL27 4R7016;\n"
             "Akcesoria;\n"
         )
         result = extract_additional_profiles_from_csv(csv, AluProfProfile)
         assert "K518139" in result
-        assert "K120470" in result
+        assert "120470" in result
+        assert "K41PL27X" in result
 
     def test_empty_section(self, tmp_dir):
         csv = write_csv(tmp_dir,

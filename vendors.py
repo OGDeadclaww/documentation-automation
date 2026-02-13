@@ -36,18 +36,30 @@ class VendorProfile:
         Przykłady:
             "K51 8143 4R8017" → "K518143"
             "K12 0470"        → "K120470"
+            "K41 PL27 4R7016" → "K41PL27X"
             "120 470"         → "120470"
             "brak kodu"       → ""
         """
         t = clean(code_text).upper()
 
-        # Z prefiksem K
-        m = cls.PROFILE_K_RE.search(t)
+        # Pattern 1: K## + 4 cyfry (np. "K51 8143")
+        m = re.search(r"\bK(\d{2})\s*(\d{4})\b", t)
         if m:
             return f"K{m.group(1)}{m.group(2)}"
 
-        # Bez prefiksu K
-        m = cls.PROFILE_BARE_RE.search(t)
+        # Pattern 2: K## + alfanumeryczny kod (np. "K41 PL27")
+        m = re.search(r"\bK(\d{2})\s+([A-Z]{1,3}\d{1,4})\b", t)
+        if m:
+            prefix = m.group(1)
+            code = m.group(2)
+            # Sufiks koloru = cyfra+litera+cyfry (np. "4R7016")
+            has_color = bool(re.search(r"\b\d[A-Z]\d{3,}\b", t))
+            if has_color:
+                return f"K{prefix}{code}X"
+            return f"K{prefix}{code}"
+
+        # Pattern 3: Bez K (np. "120 470")
+        m = re.search(r"\b(\d{2,3})\s+(\d{3,4})\b", t)
         if m:
             combined = m.group(1) + m.group(2)
             if 5 <= len(combined) <= 7:

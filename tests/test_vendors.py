@@ -29,7 +29,6 @@ class TestClean:
 # ============================================
 
 class TestAluProfProfiles:
-    """Testy parse_profile_code dla Aluprof."""
 
     @pytest.mark.parametrize("input_text, expected", [
         ("K51 8143 4R8017", "K518143"),
@@ -43,6 +42,12 @@ class TestAluProfProfiles:
         assert AluProfProfile.parse_profile_code(input_text) == expected
 
     @pytest.mark.parametrize("input_text, expected", [
+        ("K41 PL27 4R7016", "K41PL27X"),   # litery + kolor
+    ])
+    def test_alpha_with_color(self, input_text, expected):
+        assert AluProfProfile.parse_profile_code(input_text) == expected
+
+    @pytest.mark.parametrize("input_text, expected", [
         ("120 470",  "120470"),
         ("120 4700", "1204700"),
     ])
@@ -52,12 +57,11 @@ class TestAluProfProfiles:
     @pytest.mark.parametrize("input_text", [
         "",
         "hello world",
-        "8000 965 D",      # okucie, nie profil
+        "8000 965 D",
         "ABC",
     ])
     def test_no_match(self, input_text):
         assert AluProfProfile.parse_profile_code(input_text) == ""
-
 
 # ============================================
 # TESTY AluProfProfile - OKUCIA
