@@ -31,17 +31,29 @@ class VendorProfile:
     @classmethod
     def parse_profile_code(cls, code_text: str) -> str:
         """
-        Parsuje kod profilu z tekstu.
-        
-        Args:
-            code_text: Surowy tekst z HTML/CSV (np. "K51 8143 4R8017")
-        
-        Returns:
-            str: Znormalizowany kod (np. "K518143") lub "" jeśli nie rozpoznano
+        Parsuje kod profilu Aluprof.
+
+        Przykłady:
+            "K51 8143 4R8017" → "K518143"
+            "K12 0470"        → "K120470"
+            "120 470"         → "120470"
+            "brak kodu"       → ""
         """
-        raise NotImplementedError(
-            f"{cls.NAME}.parse_profile_code() nie zaimplementowane"
-        )
+        t = clean(code_text).upper()
+
+        # Z prefiksem K
+        m = cls.PROFILE_K_RE.search(t)
+        if m:
+            return f"K{m.group(1)}{m.group(2)}"
+
+        # Bez prefiksu K
+        m = cls.PROFILE_BARE_RE.search(t)
+        if m:
+            combined = m.group(1) + m.group(2)
+            if 5 <= len(combined) <= 7:
+                return combined
+
+        return ""
 
     @classmethod
     def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:

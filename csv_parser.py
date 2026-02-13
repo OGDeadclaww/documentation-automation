@@ -103,7 +103,7 @@ def extract_system_from_csv(csv_path: str) -> str:
 
             # Usuń warianty (HI/SI/EI/HS) i normalizuj
             system = re.sub(
-                r"\s*(HI|SI|EI|HS).*", "",
+                r"\s*(HI|SI).*", "",
                 cell_clean,
                 flags=re.IGNORECASE
             ).strip().lower()
