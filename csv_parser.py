@@ -18,16 +18,6 @@ SYSTEM_KEYWORDS = ["MB-", "MasterLine", "CS-", "CP-", "SlimLine", "Hi-Finity"]
 # ============================================
 
 def _read_csv_rows(csv_path: str) -> list:
-    """
-    Wczytuje CSV z automatycznym wykrywaniem kodowania.
-    Próbuje cp1250 (Windows PL), fallback na utf-8.
-    
-    Args:
-        csv_path: Ścieżka do pliku CSV
-    
-    Returns:
-        list: Lista wierszy (każdy wiersz to lista stringów)
-    """
     for encoding in ("cp1250", "utf-8"):
         try:
             with open(csv_path, "r", encoding=encoding, errors="replace") as f:
@@ -43,10 +33,6 @@ def _read_csv_rows(csv_path: str) -> list:
 # ============================================
 
 def get_positions_from_csv(csv_path: str) -> list:
-    """
-    Wyciąga numery pozycji z CSV.
-    Obsługuje Aluprof (MB-) i Reynaers (MasterLine, CS-77, etc.)
-    """
     rows = _read_csv_rows(csv_path)
     positions = []
 
@@ -54,7 +40,6 @@ def get_positions_from_csv(csv_path: str) -> list:
         line = ";".join(row)
         if "Poz." not in line:
             continue
-        # Sprawdź czy linia zawiera jakikolwiek znany system
         has_system = any(kw in line for kw in SYSTEM_KEYWORDS)
         if has_system:
             match = POZ_LINE_RE.search(line)
@@ -64,18 +49,6 @@ def get_positions_from_csv(csv_path: str) -> list:
     return positions
 
 def get_positions_with_systems(csv_path: str) -> dict:
-    """
-    Wyciąga pozycje pogrupowane wg systemu.
-    
-    Returns:
-        dict: {system: [pozycje]}
-        
-    Przykład:
-        {
-            "masterline-8": ["1", "5", "6"],
-            "cs-77": ["2", "3", "4"]
-        }
-    """
     rows = _read_csv_rows(csv_path)
     systems = {}
     
@@ -100,7 +73,6 @@ def get_positions_with_systems(csv_path: str) -> dict:
 
 
 def _detect_system_in_line(line: str) -> str:
-    """Wykrywa system z linii pozycji."""
     line_upper = line.upper()
     
     # MasterLine8
@@ -108,7 +80,7 @@ def _detect_system_in_line(line: str) -> str:
     if m:
         return f"masterline-{m.group(1)}"
     
-    # CS-77 BP, CS-77, CS-86 etc.
+    # CS-77, CP-155 etc.
     m = re.search(r"(CS|CP)-?\s*(\d+)", line_upper)
     if m:
         return f"{m.group(1).lower()}-{m.group(2)}"
@@ -134,10 +106,6 @@ def _detect_system_in_line(line: str) -> str:
 # ============================================
 
 def extract_system_from_csv(csv_path: str) -> str:
-    """
-    Wykrywa system profili z CSV.
-    Obsługuje Aluprof (MB-XX) i Reynaers (MasterLine8, CS-77, etc.)
-    """
     rows = _read_csv_rows(csv_path)
 
     for i, row in enumerate(rows):
@@ -150,7 +118,6 @@ def extract_system_from_csv(csv_path: str) -> str:
         for cell in rows[i + 1]:
             cell_clean = clean(cell).upper()
 
-            # Aluprof: MB-78EI HI → mb-78ei
             if re.match(r"MB-\d+", cell_clean):
                 system = re.sub(
                     r"\s+(HI|SI)\b.*", "",
@@ -159,14 +126,11 @@ def extract_system_from_csv(csv_path: str) -> str:
                 system = re.sub(r"\s+", "", system)
                 return system
 
-            # Reynaers: MasterLine8 HI+ → masterline-8
             m = re.match(r"(MASTERLINE)\s*(\d+)", cell_clean)
             if m:
                 system = f"masterline-{m.group(2)}"
-                # Usuń warianty HI+/SI
                 return system.lower()
 
-            # Reynaers: CS-77 BP → cs-77
             m = re.match(r"(CS|CP|SLIMLINE|HI-FINITY)-?\s*(\d+)", cell_clean)
             if m:
                 system = f"{m.group(1).lower()}-{m.group(2)}"
@@ -180,20 +144,6 @@ def extract_system_from_csv(csv_path: str) -> str:
 # ============================================
 
 def extract_color_codes_from_csv(csv_path: str) -> list:
-    """
-    Wykrywa kody kolorów z wiersza "Kolor profili:" w CSV.
-    
-    Args:
-        csv_path: Ścieżka do pliku CSV
-    
-    Returns:
-        list: Lista kodów kolorów (np. ["B4", "I4", "D"])
-    
-    Obsługiwane formaty:
-        "B4 [brązowy]"     → "B4"
-        "I4 [czarny]"      → "I4"
-        "D [srebrny]"      → "D"
-    """
     rows = _read_csv_rows(csv_path)
     colors = []
 
@@ -207,7 +157,6 @@ def extract_color_codes_from_csv(csv_path: str) -> list:
 
             cell_upper = str(cell).upper()
 
-            # Wyczyść opisy i znaki specjalne
             cell_clean = re.sub(
                 r'[\^\\[\]\'"\(\)*]', " ", cell_upper
             )
@@ -219,20 +168,16 @@ def extract_color_codes_from_csv(csv_path: str) -> list:
             )
             cell_clean = cell_clean.strip()
 
-            # Split po średniku (wiele kolorów w jednej komórce)
             segments = [s.strip() for s in cell_clean.split(";") if s.strip()]
 
             for segment in segments:
-                # Litera + cyfry: B4, I4, E6
                 for m in re.findall(r"\b([A-Z]\d{1,2})\b", segment):
                     if m not in ("X", "X1", "Y", "Y1"):
                         colors.append(m)
 
-                # Pojedyncza litera: D, E, F, G, H
                 for m in re.findall(r"(?:^|\s)([DBEFGH])(?:\s|$)", segment):
                     colors.append(m)
 
-    # Usuń duplikaty zachowując kolejność
     seen = set()
     unique = [c for c in colors if not (c in seen or seen.add(c))]
 
@@ -249,10 +194,6 @@ def extract_color_codes_from_csv(csv_path: str) -> list:
 # ============================================
 
 def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
-    """
-    Parsuje kody okuć z CSV.
-    Obsługuje Aluprof (MB-) i Reynaers (MasterLine, CS-77, etc.)
-    """
     rows = _read_csv_rows(csv_path)
 
     hardware_codes = {}
@@ -263,7 +204,6 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
         r = [clean(c) for c in row]
         line = ";".join(r)
 
-        # Nowa pozycja - obsłuż oba formaty
         mpos = POZ_LINE_RE.search(line)
         if mpos:
             has_system = any(kw in line for kw in SYSTEM_KEYWORDS)
@@ -275,7 +215,6 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
         if not current_pos:
             continue
 
-        # Nowa sekcja
         if r and r[0] and SECTION_RE.match(r[0]):
             sec = SECTION_RE.match(r[0]).group(1).capitalize()
             current_section = sec if sec in ("Akcesoria", "Okucia") else None
@@ -284,11 +223,14 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
         if current_section not in ("Akcesoria", "Okucia"):
             continue
 
-        # Parsuj kod
+        # Połączono komórki spacją, ale teraz vendor_profile czyści nadmiarowe dane
         joined = " ".join(x for x in r if x)
         code_hw = vendor_profile.parse_hardware_code(joined, color_suffix=None)
+        
         if not code_hw:
             continue
+
+        print(f"    DEBUG CSV HW: joined='{joined[:60]}' → code='{code_hw}'")
 
         desc = ""
         if i + 1 < len(rows):
@@ -307,20 +249,10 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
 
 
 # ============================================
-# PROFILE + PROFILE DODATKOWE
+# PROFILE
 # ============================================
 
 def extract_additional_profiles_from_csv(csv_path: str, vendor_profile) -> set:
-    """
-    Wyciąga profile z sekcji "Profile dodatkowe" w CSV.
-    
-    Args:
-        csv_path: Ścieżka do pliku CSV
-        vendor_profile: Klasa dostawcy (np. AluProfProfile)
-    
-    Returns:
-        set: Zbiór kodów profili (np. {"K518139", "K120470"})
-    """
     rows = _read_csv_rows(csv_path)
     profiles = set()
     in_section = False
@@ -329,12 +261,10 @@ def extract_additional_profiles_from_csv(csv_path: str, vendor_profile) -> set:
         r = [clean(c) for c in row]
         line = ";".join(r)
 
-        # Początek sekcji
         if re.search(r"Profile\s+dodatkowe", line, re.IGNORECASE):
             in_section = True
             continue
 
-        # Koniec sekcji
         if in_section and r and r[0]:
             if re.match(
                 r"^(Akcesoria|Okucia|Izolacyjność)", r[0], re.IGNORECASE
@@ -342,7 +272,6 @@ def extract_additional_profiles_from_csv(csv_path: str, vendor_profile) -> set:
                 in_section = False
                 continue
 
-        # Parsuj profile
         if in_section:
             for cell in r:
                 code = vendor_profile.parse_profile_code(cell)
@@ -352,21 +281,13 @@ def extract_additional_profiles_from_csv(csv_path: str, vendor_profile) -> set:
     return profiles
 
 def get_profile_codes_from_csv(csv_path: str, vendor_profile) -> set:
-    """
-    Wyciąga WSZYSTKIE kody profili z sekcji 'Profile' i 'Profile dodatkowe' w CSV.
-    
-    Returns:
-        set: Kody profili (np. {"1080081X", "4080014X", "1081874"})
-    """
     rows = _read_csv_rows(csv_path)
     profiles = set()
     current_section = None
 
     for row in rows:
         r = [clean(c) for c in row]
-        line = ";".join(r)
-
-        # Wykryj sekcję
+        
         if r and r[0]:
             first = r[0].strip()
             if re.match(r"^Profile\s*$", first, re.IGNORECASE):
@@ -382,7 +303,6 @@ def get_profile_codes_from_csv(csv_path: str, vendor_profile) -> set:
         if current_section != "profile":
             continue
 
-        # Parsuj kody profili
         for cell in r:
             code = vendor_profile.parse_profile_code(cell)
             if code:
@@ -391,19 +311,6 @@ def get_profile_codes_from_csv(csv_path: str, vendor_profile) -> set:
     return profiles
 
 def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
-    """
-    Wyciąga kody profili pogrupowane wg systemu.
-    Każda pozycja ma swój system i swoje profile.
-    
-    Returns:
-        dict: {system: set(kody_profili)}
-        
-    Przykład:
-        {
-            "masterline-8": {"108.0081.X", "408.0014.X", ...},
-            "cs-77": {"108.0081.X", "008.3125.X", "0S0.2703", ...}
-        }
-    """
     rows = _read_csv_rows(csv_path)
     systems = {}
     current_system = None
@@ -413,7 +320,6 @@ def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
         r = [clean(c) for c in row]
         line = ";".join(r)
 
-        # Wykryj pozycję i jej system
         match = POZ_LINE_RE.search(line)
         if match:
             detected = _detect_system_in_line(line)
@@ -427,7 +333,6 @@ def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
         if not current_system:
             continue
 
-        # Wykryj sekcję
         if r and r[0]:
             first = r[0].strip()
             if re.match(r"^Profile(\s+dodatkowe)?\s*$", first, re.IGNORECASE):
@@ -440,7 +345,6 @@ def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
         if current_section != "profile":
             continue
 
-        # Parsuj kody profili
         for cell in r:
             code = vendor_profile.parse_profile_code(cell)
             if code:
