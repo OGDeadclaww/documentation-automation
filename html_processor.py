@@ -450,14 +450,6 @@ def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile):
     if not out:
         print(f"       (pusto)")
 
-    # DEBUG: Porównaj z kodami z CSV
-    print(f"\n    DEBUG: Kody z CSV vs kody z HTML:")
-    csv_codes = ["80122214X", "80122224X", "80322073X", "80322092X",
-                 "80322102X", "80379931X", "87122404X"]
-    for code in csv_codes:
-        status = "✅" if code in out else "❌ BRAK"
-        print(f"       {code}: {status}")
-
     return out
 
 

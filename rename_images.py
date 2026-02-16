@@ -108,42 +108,51 @@ def main():
     print(f"PRZETWARZANIE - Dostawca: {vendor_profile.NAME}")
     print("=" * 60)
 
-    system = validate_and_choose_system(csv_file, extract_system_from_csv)
-    if not system:
-        messagebox.showerror("Błąd", "Nie podano systemu - przerywam.")
-        return
+    # Wykryj WSZYSTKIE systemy w CSV
+    from csv_parser import get_positions_with_systems
+    systems_map = get_positions_with_systems(csv_file)
+    
+    if not systems_map:
+        # Fallback - stara logika
+        system = validate_and_choose_system(csv_file, extract_system_from_csv)
+        if not system:
+            messagebox.showerror("Błąd", "Nie podano systemu.")
+            return
+        positions = get_positions_from_csv(csv_file)
+        systems_map = {system: positions}
+    
+    print(f"\n📋 Wykryte systemy:")
+    for sys_name, pos_list in systems_map.items():
+        print(f"   {sys_name}: Poz. {', '.join(pos_list)}")
 
-    # Ścieżki wyjściowe
+    # Wspólne ścieżki
     output_views = os.path.join(PROJECTS_IMAGES, project_name, "views")
-    output_profiles = os.path.join(IMAGES_DB, vendor_key, "profiles", system)
     output_hardware = os.path.join(IMAGES_DB, vendor_key, "hardware")
-
     os.makedirs(output_views, exist_ok=True)
-    os.makedirs(output_profiles, exist_ok=True)
     os.makedirs(output_hardware, exist_ok=True)
 
-    print(f"\n📁 Zapisuję do:")
-    print(f"  Views:    {output_views}")
-    print(f"  Profiles: {output_profiles}")
-    print(f"  Hardware: {output_hardware}\n")
-
-    # KROK 1: Rzuty
-    print("[KROK 1/4] Przetwarzanie rzutów...")
+    # KROK 1: Rzuty (wspólne dla wszystkich systemów)
+    print("\n[KROK 1/4] Przetwarzanie rzutów...")
     prefix = get_project_prefix_from_met(met_file)
-    positions = get_positions_from_csv(csv_file)
-    print(f"✓ Znaleziono {len(positions)} pozycji")
+    all_positions = []
+    for pos_list in systems_map.values():
+        all_positions.extend(pos_list)
+    print(f"✓ Znaleziono {len(all_positions)} pozycji łącznie")
     rk_images = get_rk_images_from_html(rk_html)
     print(f"✓ Znaleziono {len(rk_images)} obrazków w RK.html")
-    rename_views(positions, rk_images, rk_images_dir, prefix, output_views)
+    rename_views(all_positions, rk_images, rk_images_dir, prefix, output_views)
 
-    # KROK 2: Profile
+    # KROK 2: Profile (osobny folder per system)
     print("\n[KROK 2/4] Przetwarzanie profili...")
-    rename_profiles_from_lp_html(lp_html, lp_images_dir, output_profiles, vendor_profile)
-    additional = extract_additional_profiles_from_csv(csv_file, vendor_profile)
-    if additional:
-        print(f"⚠️ Profile dodatkowe w CSV: {', '.join(sorted(additional))}")
+    for sys_name in systems_map.keys():
+        output_profiles = os.path.join(IMAGES_DB, vendor_key, "profiles", sys_name)
+        os.makedirs(output_profiles, exist_ok=True)
+        print(f"\n  📁 System: {sys_name} → {output_profiles}")
+        rename_profiles_from_lp_html(
+            lp_html, lp_images_dir, output_profiles, vendor_profile
+        )
 
-    # KROK 3: Parsowanie okuć
+    # KROK 3: Okucia
     print("\n[KROK 3/4] Parsowanie okuć z CSV...")
     hardware_codes = parse_hardware_from_csv(csv_file, vendor_profile)
     print(f"✓ Znaleziono {len(hardware_codes)} kodów okuć")
@@ -159,21 +168,22 @@ def main():
     log_audit("IMAGES_PROCESSED", {
         "project": project_name,
         "vendor": vendor_key,
-        "system": system,
-        "positions": len(positions),
+        "systems": list(systems_map.keys()),
+        "positions": len(all_positions),
         "hardware": len(hardware_codes),
     })
 
+    # Podsumowanie
+    systems_text = ", ".join(systems_map.keys())
     print("\n" + "=" * 60)
     print("✅ GOTOWE!")
     print("=" * 60)
-
     messagebox.showinfo(
         "Sukces!",
         f"Obrazki przetworzone!\n\n"
         f"Projekt: {project_name}\n"
-        f"System: {system}\n"
-        f"Pozycje: {len(positions)}\n"
+        f"Systemy: {systems_text}\n"
+        f"Pozycje: {len(all_positions)}\n"
         f"Okucia: {len(hardware_codes)}"
     )
 

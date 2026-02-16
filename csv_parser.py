@@ -63,6 +63,71 @@ def get_positions_from_csv(csv_path: str) -> list:
 
     return positions
 
+def get_positions_with_systems(csv_path: str) -> dict:
+    """
+    Wyciąga pozycje pogrupowane wg systemu.
+    
+    Returns:
+        dict: {system: [pozycje]}
+        
+    Przykład:
+        {
+            "masterline-8": ["1", "5", "6"],
+            "cs-77": ["2", "3", "4"]
+        }
+    """
+    rows = _read_csv_rows(csv_path)
+    systems = {}
+    
+    for row in rows:
+        line = ";".join(row)
+        if "Poz." not in line:
+            continue
+        
+        match = POZ_LINE_RE.search(line)
+        if not match:
+            continue
+        
+        pos = match.group(1)
+        system = _detect_system_in_line(line)
+        
+        if system:
+            if system not in systems:
+                systems[system] = []
+            systems[system].append(pos)
+    
+    return systems
+
+
+def _detect_system_in_line(line: str) -> str:
+    """Wykrywa system z linii pozycji."""
+    line_upper = line.upper()
+    
+    # MasterLine8
+    m = re.search(r"MASTERLINE\s*(\d+)", line_upper)
+    if m:
+        return f"masterline-{m.group(1)}"
+    
+    # CS-77 BP, CS-77, CS-86 etc.
+    m = re.search(r"(CS|CP)-?\s*(\d+)", line_upper)
+    if m:
+        return f"{m.group(1).lower()}-{m.group(2)}"
+    
+    # MB-78EI etc.
+    m = re.search(r"(MB-\d+\w*)", line_upper)
+    if m:
+        system = re.sub(r"\s+(HI|SI)\b.*", "", m.group(1), flags=re.IGNORECASE)
+        return system.strip().lower()
+    
+    # SlimLine, Hi-Finity
+    m = re.search(r"(SLIMLINE|HI-FINITY)\s*(\d*)", line_upper)
+    if m:
+        name = m.group(1).lower()
+        num = m.group(2)
+        return f"{name}-{num}" if num else name
+    
+    return None
+
 
 # ============================================
 # SYSTEM PROFILI

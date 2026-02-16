@@ -98,7 +98,7 @@ def select_file(file_type: str, title: str) -> str:
     root.withdraw()
 
     filetypes = {
-        "MET":  [("MET files", "*.MET"), ("All files", "*.*")],
+        "MET":  [("Project files", "*.MET;*.REY"), ("MET files", "*.MET"), ("REY files", "*.REY"), ("All files", "*.*")],
         "CSV":  [("CSV files", "*.csv"), ("All files", "*.*")],
         "HTML": [("HTML files", "*.html"), ("All files", "*.*")],
         "ALL":  [("All files", "*.*")],
