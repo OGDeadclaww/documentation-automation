@@ -183,62 +183,43 @@ class ReynaersProfile(VendorProfile):
     NAME = "Reynaers"
     KEY = "reynaers"
 
-    # Poprawiony regex: pierwsza grupa może mieć litery (0S0)
     CODE_RE = re.compile(
         r"\b(\d[A-Z0-9]\d)\.(\d{4})\.(\S+(?:\s+\S+)*)?",
         re.IGNORECASE
     )
 
-    COLOR_SUFFIX_RE = re.compile(
-        r"(?:\d{2}\s+\d{4}(?:-\d)?|[A-Z]{2,}|\d{2}\s+W:)",
-        re.IGNORECASE
-    )
-
-    NEUTRAL_SUFFIXES = {"00", "--"}
-
     @classmethod
-    def _is_color_suffix(cls, suffix: str) -> bool:
+    def _is_ral_color(cls, suffix: str) -> bool:
         """
-        Sprawdza czy sufiks oznacza kolor.
-
-        Kolor:
-            "59 7021-2"                    → True (RAL jednolity)
-            "69 W:59 7047-2+Z:59 7021-2"   → True (RAL dwukolorowy)
-            "ZC"                            → True (cynk)
-
-        Nie kolor:
-            "00"  → False (standard)
-            "--"  → False (brak)
-            "04"  → False (wariant)
-            "07"  → False (wariant)
-            "14"  → False (wariant)
-            "17"  → False (wariant)
+        Sprawdza czy sufiks to kolor RAL (zmienny per projekt).
+        
+        RAL:
+            "59 7021-2"                    → True
+            "69 W:59 7047-2+Z:59 7021-2"   → True
+            
+        Nie RAL (stały kod materiału/wariantu):
+            "ZC", "HM", "N4", "C35"        → False
+            "00", "04", "07", "14", "17"    → False
+            "--"                            → False
         """
         if not suffix:
             return False
         suffix = suffix.strip()
-        if suffix in cls.NEUTRAL_SUFFIXES:
-            return False
-        # Czyste 2-cyfrowe numery to warianty, NIE kolory
-        if re.match(r"^\d{2}$", suffix):
-            return False
-        # RAL format: "59 7021-2" lub "69 W:59..." lub litery "ZC"
+        # RAL: cyfra+cyfra+spacja+4cyfry (np. "59 7021-2")
         if re.search(r"\d{2}\s+\d{4}", suffix):
             return True
+        # Dwukolorowy RAL: "69 W:59..."
         if re.search(r"\d{2}\s+W:", suffix):
-            return True
-        if re.match(r"^[A-Z]{2,}$", suffix):
             return True
         return False
 
     @classmethod
     def _parse_code(cls, code_text: str) -> tuple:
         """
+        Parsuje kod Reynaers.
+        
         Returns:
-            tuple: (formatted_code, has_color) lub ("", False)
-            
-            formatted_code zachowuje kropki:
-                "108.0081", "0S0.2703", "061.6634"
+            tuple: (full_code_with_suffix, is_parseable) lub ("", False)
         """
         t = clean(code_text).upper()
         m = cls.CODE_RE.search(t)
@@ -247,55 +228,57 @@ class ReynaersProfile(VendorProfile):
 
         group = m.group(1)
         article = m.group(2)
-        suffix = m.group(3) or ""
+        suffix = (m.group(3) or "").strip()
 
-        # Zachowaj format z kropkami
-        base_code = f"{group}.{article}"
-        has_color = cls._is_color_suffix(suffix)
+        base = f"{group}.{article}"
 
-        # Zachowaj -- w kodzie (profil stalowy)
-        suffix_clean = suffix.strip()
-        if suffix_clean == "--":
-            return (f"{base_code}.--", False)
-        
+        if not suffix:
+            # Brak sufiksu - nie powinno się zdarzyć ale obsłuż
+            return (base, True)
 
-        return (base_code, has_color)
+        if cls._is_ral_color(suffix):
+            # RAL → zamień na .XX
+            return (f"{base}.XX", True)
+
+        # Wszystko inne → zachowaj oryginalny sufiks
+        return (f"{base}.{suffix}", True)
 
     @classmethod
     def parse_profile_code(cls, code_text: str) -> str:
         """
+        Parsuje kod profilu Reynaers. Zachowuje oryginalny sufiks.
+        
         Przykłady:
             "108.0081.59 7021-2"              → "108.0081.XX"
             "408.0014.69 W:59 7047-2+Z:7021"  → "408.0014.XX"
-            "108.1874.17"                     → "108.1874"
             "0S0.2703.--"                     → "0S0.2703.--"
-            "061.6634.ZC"                     → "061.6634.XX"
+            "061.6634.ZC"                     → "061.6634.ZC"
+            "108.1874.17"                     → "108.1874.17"
+            "069.6831.04"                     → "069.6831.04"
+            "168.5000.00"                     → "168.5000.00"
+            "081.9229.07"                     → "081.9229.07"
+            "065.7443.14"                     → "065.7443.14"
+            "xxx.xxxx.HM"                     → "xxx.xxxx.HM"
+            "xxx.xxxx.N4"                     → "xxx.xxxx.N4"
+            "xxx.xxxx.C35"                    → "xxx.xxxx.C35"
         """
-        base_code, has_color = cls._parse_code(code_text)
-        if not base_code:
-            return ""
-        if base_code.endswith(".--"):
-            return base_code
-        return f"{base_code}.XX" if has_color else base_code
+        code, ok = cls._parse_code(code_text)
+        return code if ok else ""
 
     @classmethod
     def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:
         """
+        Parsuje kod okucia Reynaers.
+        
         Przykłady:
-            "061.6634.ZC"         → "061.6634.XX"
+            "061.6634.ZC"         → "061.6634.ZC"
             "065.6566.59 7021-2"  → "065.6566.XX"
             "061.6461.--"         → "061.6461.--"
-            "069.6831.04"         → "069.6831"
-            "168.5000.00"         → "168.5000"
+            "069.6831.04"         → "069.6831.04"
+            "168.5000.00"         → "168.5000.00"
         """
-        base_code, has_color = cls._parse_code(code_text)
-        if not base_code:
-            return ""
-        if base_code.endswith(".--"):
-            return base_code
-        if has_color or color_suffix:
-            return f"{base_code}.XX"
-        return base_code
+        code, ok = cls._parse_code(code_text)
+        return code if ok else ""
 
 # ============================================
 # GENERIC (fallback dla nieznanych dostawców)
