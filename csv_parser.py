@@ -3,7 +3,7 @@
 Parsowanie plików CSV z danymi projektowymi.
 Wyciąga pozycje, system, kolory, okucia i profile dodatkowe.
 """
-import os
+
 import re
 import csv
 
@@ -16,6 +16,7 @@ SYSTEM_KEYWORDS = ["MB-", "MasterLine", "CS-", "CP-", "SlimLine", "Hi-Finity"]
 # ============================================
 # WEWNĘTRZNE HELPERS
 # ============================================
+
 
 def _read_csv_rows(csv_path: str) -> list:
     for encoding in ("cp1250", "utf-8"):
@@ -31,6 +32,7 @@ def _read_csv_rows(csv_path: str) -> list:
 # ============================================
 # POZYCJE
 # ============================================
+
 
 def get_positions_from_csv(csv_path: str) -> list:
     rows = _read_csv_rows(csv_path)
@@ -48,62 +50,64 @@ def get_positions_from_csv(csv_path: str) -> list:
 
     return positions
 
+
 def get_positions_with_systems(csv_path: str) -> dict:
     rows = _read_csv_rows(csv_path)
     systems = {}
-    
+
     for row in rows:
         line = ";".join(row)
         if "Poz." not in line:
             continue
-        
+
         match = POZ_LINE_RE.search(line)
         if not match:
             continue
-        
+
         pos = match.group(1)
         system = _detect_system_in_line(line)
-        
+
         if system:
             if system not in systems:
                 systems[system] = []
             systems[system].append(pos)
-    
+
     return systems
 
 
 def _detect_system_in_line(line: str) -> str:
     line_upper = line.upper()
-    
+
     # MasterLine8
     m = re.search(r"MASTERLINE\s*(\d+)", line_upper)
     if m:
         return f"masterline-{m.group(1)}"
-    
+
     # CS-77, CP-155 etc.
     m = re.search(r"(CS|CP)-?\s*(\d+)", line_upper)
     if m:
         return f"{m.group(1).lower()}-{m.group(2)}"
-    
+
     # MB-78EI etc.
     m = re.search(r"(MB-\d+\w*)", line_upper)
     if m:
         system = re.sub(r"\s+(HI|SI)\b.*", "", m.group(1), flags=re.IGNORECASE)
         return system.strip().lower()
-    
+
     # SlimLine, Hi-Finity
     m = re.search(r"(SLIMLINE|HI-FINITY)\s*(\d*)", line_upper)
     if m:
         name = m.group(1).lower()
         num = m.group(2)
         return f"{name}-{num}" if num else name
-    
+
     return None
 
 
 # ============================================
 # SYSTEM PROFILI
 # ============================================
+
 
 def extract_system_from_csv(csv_path: str) -> str:
     rows = _read_csv_rows(csv_path)
@@ -119,10 +123,11 @@ def extract_system_from_csv(csv_path: str) -> str:
             cell_clean = clean(cell).upper()
 
             if re.match(r"MB-\d+", cell_clean):
-                system = re.sub(
-                    r"\s+(HI|SI)\b.*", "",
-                    cell_clean, flags=re.IGNORECASE
-                ).strip().lower()
+                system = (
+                    re.sub(r"\s+(HI|SI)\b.*", "", cell_clean, flags=re.IGNORECASE)
+                    .strip()
+                    .lower()
+                )
                 system = re.sub(r"\s+", "", system)
                 return system
 
@@ -143,6 +148,7 @@ def extract_system_from_csv(csv_path: str) -> str:
 # KOLORY
 # ============================================
 
+
 def extract_color_codes_from_csv(csv_path: str) -> list:
     rows = _read_csv_rows(csv_path)
     colors = []
@@ -157,9 +163,7 @@ def extract_color_codes_from_csv(csv_path: str) -> list:
 
             cell_upper = str(cell).upper()
 
-            cell_clean = re.sub(
-                r'[\^\\[\]\'"\(\)*]', " ", cell_upper
-            )
+            cell_clean = re.sub(r'[\^\\[\]\'"\(\)*]', " ", cell_upper)
             cell_clean = re.sub(
                 r"\b(CZARNY|BRĄZOWY|ANODA|SREBRNY|SREBRNA|BIAŁY|"
                 r"MAT|MATOWY|LAKIEROWANY|NIETYPOWY|STANDARD)\b",
@@ -184,7 +188,7 @@ def extract_color_codes_from_csv(csv_path: str) -> list:
     if unique:
         print(f"    🎨 Wykryte kody kolorów: {', '.join(unique)}")
     else:
-        print(f"    ⚠️ Nie wykryto kodów kolorów")
+        print("    ⚠️ Nie wykryto kodów kolorów")
 
     return unique
 
@@ -192,6 +196,7 @@ def extract_color_codes_from_csv(csv_path: str) -> list:
 # ============================================
 # OKUCIA / AKCESORIA
 # ============================================
+
 
 def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
     rows = _read_csv_rows(csv_path)
@@ -226,7 +231,7 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
         # Połączono komórki spacją, ale teraz vendor_profile czyści nadmiarowe dane
         joined = " ".join(x for x in r if x)
         code_hw = vendor_profile.parse_hardware_code(joined, color_suffix=None)
-        
+
         if not code_hw:
             continue
 
@@ -252,6 +257,7 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
 # PROFILE
 # ============================================
 
+
 def extract_additional_profiles_from_csv(csv_path: str, vendor_profile) -> set:
     rows = _read_csv_rows(csv_path)
     profiles = set()
@@ -266,9 +272,7 @@ def extract_additional_profiles_from_csv(csv_path: str, vendor_profile) -> set:
             continue
 
         if in_section and r and r[0]:
-            if re.match(
-                r"^(Akcesoria|Okucia|Izolacyjność)", r[0], re.IGNORECASE
-            ):
+            if re.match(r"^(Akcesoria|Okucia|Izolacyjność)", r[0], re.IGNORECASE):
                 in_section = False
                 continue
 
@@ -280,6 +284,7 @@ def extract_additional_profiles_from_csv(csv_path: str, vendor_profile) -> set:
 
     return profiles
 
+
 def get_profile_codes_from_csv(csv_path: str, vendor_profile) -> set:
     rows = _read_csv_rows(csv_path)
     profiles = set()
@@ -287,7 +292,7 @@ def get_profile_codes_from_csv(csv_path: str, vendor_profile) -> set:
 
     for row in rows:
         r = [clean(c) for c in row]
-        
+
         if r and r[0]:
             first = r[0].strip()
             if re.match(r"^Profile\s*$", first, re.IGNORECASE):
@@ -296,7 +301,9 @@ def get_profile_codes_from_csv(csv_path: str, vendor_profile) -> set:
             elif re.match(r"^Profile\s+dodatkowe", first, re.IGNORECASE):
                 current_section = "profile"
                 continue
-            elif re.match(r"^(Uszczelki|Akcesoria|Okucia|Izolacyjność)", first, re.IGNORECASE):
+            elif re.match(
+                r"^(Uszczelki|Akcesoria|Okucia|Izolacyjność)", first, re.IGNORECASE
+            ):
                 current_section = None
                 continue
 
@@ -309,6 +316,7 @@ def get_profile_codes_from_csv(csv_path: str, vendor_profile) -> set:
                 profiles.add(code)
 
     return profiles
+
 
 def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
     rows = _read_csv_rows(csv_path)
@@ -338,7 +346,9 @@ def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
             if re.match(r"^Profile(\s+dodatkowe)?\s*$", first, re.IGNORECASE):
                 current_section = "profile"
                 continue
-            elif re.match(r"^(Uszczelki|Akcesoria|Okucia|Izolacyjność)", first, re.IGNORECASE):
+            elif re.match(
+                r"^(Uszczelki|Akcesoria|Okucia|Izolacyjność)", first, re.IGNORECASE
+            ):
                 current_section = None
                 continue
 
@@ -352,7 +362,9 @@ def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
 
     return systems
 
+
 # csv_parser.py (dodaj to na końcu pliku)
+
 
 def get_data_for_position(csv_path: str, position_number: str, vendor_profile) -> dict:
     """
@@ -361,53 +373,52 @@ def get_data_for_position(csv_path: str, position_number: str, vendor_profile) -
     więc tutaj zrobimy proste przybliżenie na podstawie sekcji.
     """
     rows = _read_csv_rows(csv_path)
-    data = {
-        "profiles": [],
-        "hardware": []
-    }
-    
+    data = {"profiles": [], "hardware": []}
+
     current_pos = None
-    
+
     for row in rows:
         line = ";".join(row)
-        
+
         # 1. Wykryj pozycję
         if "Poz." in line:
             m = POZ_LINE_RE.search(line)
             if m:
                 current_pos = m.group(1)
             else:
-                current_pos = None # Reset jeśli nie udało się sparsować numeru
+                current_pos = None  # Reset jeśli nie udało się sparsować numeru
             continue
-            
+
         # Jeśli nie jesteśmy w szukanej pozycji, pomiń
         if current_pos != position_number:
             continue
-            
+
         # Jesteśmy wewnątrz naszej pozycji
         r = [clean(c) for c in row]
-        if not any(r): continue 
+        if not any(r):
+            continue
 
         # --- ZMIANA TUTAJ: Bardziej restrykcyjna pętla ---
-        # Zamiast szukać w 3 kolumnach, szukamy tylko w pierwszej niepustej, 
+        # Zamiast szukać w 3 kolumnach, szukamy tylko w pierwszej niepustej,
         # która wygląda na kod.
-        
+
         found_profile = False
         # Szukamy tylko w kolumnach 0 i 1 (zazwyczaj tam jest kod)
-        for i in range(min(len(r), 2)): 
+        for i in range(min(len(r), 2)):
             cell = r[i]
-            if not cell: continue
-            
+            if not cell:
+                continue
+
             # Próba parsowania
             prof_code = vendor_profile.parse_profile_code(cell)
-            
+
             # Dodatkowy filtr: Kod musi mieć min. 5 znaków, żeby odsiać np. "L" czy "1"
             if prof_code and len(prof_code) > 4:
                 # To prawdopodobnie profil
                 # Opis jest zazwyczaj w następnej kolumnie
                 desc_idx = i + 1
                 desc = r[desc_idx] if len(r) > desc_idx else "Profil"
-                
+
                 # Ilość i wymiar to heurystyka (zgadywanie)
                 # Często: Kod | Opis | Ilość | Jedn | Wymiar
                 qty = "1"
@@ -416,20 +427,23 @@ def get_data_for_position(csv_path: str, position_number: str, vendor_profile) -
                 for j in range(i + 2, min(len(r), i + 6)):
                     val = r[j].lower()
                     if "szt" in val or val.isdigit() or "," in val:
-                         if not qty or qty == "1": qty = r[j]
-                    if "mm" in val or (val.replace(".", "").isdigit() and len(val)>2):
-                         dims = r[j]
+                        if not qty or qty == "1":
+                            qty = r[j]
+                    if "mm" in val or (val.replace(".", "").isdigit() and len(val) > 2):
+                        dims = r[j]
 
-                data["profiles"].append({
-                    "code": prof_code,
-                    "desc": desc,
-                    "quantity": qty,
-                    "dimensions": dims,
-                    "location": "—"
-                })
+                data["profiles"].append(
+                    {
+                        "code": prof_code,
+                        "desc": desc,
+                        "quantity": qty,
+                        "dimensions": dims,
+                        "location": "—",
+                    }
+                )
                 found_profile = True
-                break # Znaleziono w tym wierszu, koniec
-        
+                break  # Znaleziono w tym wierszu, koniec
+
         if found_profile:
             continue
 

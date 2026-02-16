@@ -2,8 +2,8 @@
 """
 Testy parsowania plików CSV.
 """
+
 import os
-import pytest
 from csv_parser import (
     get_positions_from_csv,
     extract_system_from_csv,
@@ -12,10 +12,10 @@ from csv_parser import (
 )
 from vendors import AluProfProfile
 
-
 # ============================================
 # HELPER: tworzenie CSV do testów
 # ============================================
+
 
 def write_csv(tmp_dir, content, filename="test.csv"):
     path = os.path.join(tmp_dir, filename)
@@ -28,12 +28,14 @@ def write_csv(tmp_dir, content, filename="test.csv"):
 # POZYCJE
 # ============================================
 
+
 class TestGetPositions:
     def test_basic(self, tmp_dir):
-        csv = write_csv(tmp_dir,
+        csv = write_csv(
+            tmp_dir,
             "Poz. 1;;MB-78EI;Drzwi;\n"
             "Poz. 2;;MB-78EI;Okno;\n"
-            "Poz. 5;;MB-78EI;FIX;\n"
+            "Poz. 5;;MB-78EI;FIX;\n",
         )
         result = get_positions_from_csv(csv)
         assert result == ["1", "2", "5"]
@@ -44,9 +46,9 @@ class TestGetPositions:
         assert result == []
 
     def test_ignores_non_mb(self, tmp_dir):
-        csv = write_csv(tmp_dir,
-            "Poz. 1;;MB-78EI;OK;\n"
-            "Poz. 2;;CS-77;Inne;\n"  # brak MB-
+        csv = write_csv(
+            tmp_dir,
+            "Poz. 1;;MB-78EI;OK;\n" "Poz. 2;;CS-77;Inne;\n",  # brak MB-
         )
         result = get_positions_from_csv(csv)
         assert result == ["1"]
@@ -56,20 +58,15 @@ class TestGetPositions:
 # SYSTEM
 # ============================================
 
+
 class TestExtractSystem:
     def test_basic(self, tmp_dir):
-        csv = write_csv(tmp_dir,
-            "System:;\n"
-            ";MB-78EI HI;\n"
-        )
+        csv = write_csv(tmp_dir, "System:;\n" ";MB-78EI HI;\n")
         result = extract_system_from_csv(csv)
         assert result == "mb-78ei"
 
     def test_mb86(self, tmp_dir):
-        csv = write_csv(tmp_dir,
-            "System:;\n"
-            ";MB-86 SI;\n"
-        )
+        csv = write_csv(tmp_dir, "System:;\n" ";MB-86 SI;\n")
         result = extract_system_from_csv(csv)
         assert result == "mb-86"
 
@@ -83,10 +80,11 @@ class TestExtractSystem:
 # KOLORY
 # ============================================
 
+
 class TestExtractColors:
     def test_multiple_colors(self, tmp_dir):
-        csv = write_csv(tmp_dir,
-            "Kolor profili:;B4 [brązowy];I4 [czarny];D [srebrny]\n"
+        csv = write_csv(
+            tmp_dir, "Kolor profili:;B4 [brązowy];I4 [czarny];D [srebrny]\n"
         )
         result = extract_color_codes_from_csv(csv)
         assert "B4" in result
@@ -94,9 +92,7 @@ class TestExtractColors:
         assert "D" in result
 
     def test_single_color(self, tmp_dir):
-        csv = write_csv(tmp_dir,
-            "Kolor profili:;B4 [brązowy]\n"
-        )
+        csv = write_csv(tmp_dir, "Kolor profili:;B4 [brązowy]\n")
         result = extract_color_codes_from_csv(csv)
         assert result == ["B4"]
 
@@ -110,14 +106,16 @@ class TestExtractColors:
 # PROFILE DODATKOWE
 # ============================================
 
+
 class TestAdditionalProfiles:
     def test_finds_profiles(self, tmp_dir):
-        csv = write_csv(tmp_dir,
+        csv = write_csv(
+            tmp_dir,
             "Profile dodatkowe;\n"
             "K51 8139;;\n"
             "120 470;;\n"
             "K41 PL27 4R7016;\n"
-            "Akcesoria;\n"
+            "Akcesoria;\n",
         )
         result = extract_additional_profiles_from_csv(csv, AluProfProfile)
         assert "K518139" in result
@@ -125,9 +123,6 @@ class TestAdditionalProfiles:
         assert "K41PL27X" in result
 
     def test_empty_section(self, tmp_dir):
-        csv = write_csv(tmp_dir,
-            "Profile dodatkowe;\n"
-            "Akcesoria;\n"
-        )
+        csv = write_csv(tmp_dir, "Profile dodatkowe;\n" "Akcesoria;\n")
         result = extract_additional_profiles_from_csv(csv, AluProfProfile)
         assert result == set()

@@ -4,6 +4,7 @@ Główny skrypt orkiestrujący przetwarzanie obrazków.
 Wersja z automatycznym wykrywaniem plików w folderze źródłowym.
 Obsługuje rozszerzenia: .MET (Aluprof), .REY (Reynaers), .ALI (Aliplast).
 """
+
 import os
 import glob
 from tkinter import messagebox
@@ -35,6 +36,7 @@ from html_processor import (
     rename_hardware,
 )
 
+
 def find_file_by_pattern(folder, pattern, description):
     """Pomocnicza funkcja do szukania pliku wg wzorca."""
     files = glob.glob(os.path.join(folder, pattern))
@@ -44,6 +46,7 @@ def find_file_by_pattern(folder, pattern, description):
     filename = os.path.basename(files[0])
     print(f"   ✓ Znaleziono {description}: {filename}")
     return files[0]
+
 
 def find_folder_by_pattern(folder, pattern, description):
     """Pomocnicza funkcja do szukania folderu wg wzorca."""
@@ -55,9 +58,10 @@ def find_folder_by_pattern(folder, pattern, description):
     print(f"   ✓ Znaleziono {description}: {dirname}")
     return dirs[0]
 
+
 def auto_detect_vendor(csv_file, meta_file):
     """
-    Próbuje wykryć dostawcę na podstawie systemu w CSV 
+    Próbuje wykryć dostawcę na podstawie systemu w CSV
     oraz rozszerzenia pliku meta (.REY, .ALI).
     """
     print("   🔍 Analiza danych w celu wykrycia dostawcy...")
@@ -70,7 +74,7 @@ def auto_detect_vendor(csv_file, meta_file):
         if ext == ".ali":
             # Zakładamy, że Aliplast używa parsera Aluprof (zgodnie z vendors.py)
             return VENDOR_PROFILES["aliplast"]
-    
+
     # 2. Analiza CSV (System)
     sys_name = extract_system_from_csv(csv_file)
     if not sys_name:
@@ -85,12 +89,15 @@ def auto_detect_vendor(csv_file, meta_file):
 
     if "mb-" in sys_lower:
         return VENDOR_PROFILES["aluprof"]
-    if any(x in sys_lower for x in ["masterline", "cs-", "cp-", "slimline", "hi-finity"]):
+    if any(
+        x in sys_lower for x in ["masterline", "cs-", "cp-", "slimline", "hi-finity"]
+    ):
         return VENDOR_PROFILES["reynaers"]
     if "aliplast" in sys_lower:
         return VENDOR_PROFILES["aliplast"]
-    
+
     return None
+
 
 def main():
     print("=" * 60)
@@ -109,7 +116,7 @@ def main():
     print(f"📂 Źródło: {source_dir}\n")
 
     # --- Automatyczne szukanie plików ---
-    
+
     # 1. Plik projektu (MET / REY / ALI)
     meta_file = find_file_by_pattern(source_dir, "*.met", "Plik Aluprof (.MET)")
     if not meta_file:
@@ -120,33 +127,42 @@ def main():
     # 2. Plik CSV
     csv_file = find_file_by_pattern(source_dir, "*dane*.csv", "Plik CSV")
     if not csv_file:
-         csv_file = find_file_by_pattern(source_dir, "*.csv", "Plik CSV (alt)")
+        csv_file = find_file_by_pattern(source_dir, "*.csv", "Plik CSV (alt)")
 
     # 3. HTML i foldery
     rk_html = find_file_by_pattern(source_dir, "*RK*images.html", "RK HTML")
     rk_dir = find_folder_by_pattern(source_dir, "*RK*images.files", "RK Folder")
-    
+
     lp_html = find_file_by_pattern(source_dir, "*LP*images.html", "LP HTML")
     lp_dir = find_folder_by_pattern(source_dir, "*LP*images.files", "LP Folder")
 
     # Weryfikacja braków
     missing = []
-    if not meta_file: missing.append("Plik projektu (.MET / .REY / .ALI)")
-    if not csv_file: missing.append("Plik CSV (dane)")
-    if not rk_html: missing.append("RK_images.html")
-    if not rk_dir: missing.append("Folder RK_images.files")
-    if not lp_html: missing.append("LP_images.html")
-    if not lp_dir: missing.append("Folder LP_images.files")
+    if not meta_file:
+        missing.append("Plik projektu (.MET / .REY / .ALI)")
+    if not csv_file:
+        missing.append("Plik CSV (dane)")
+    if not rk_html:
+        missing.append("RK_images.html")
+    if not rk_dir:
+        missing.append("Folder RK_images.files")
+    if not lp_html:
+        missing.append("LP_images.html")
+    if not lp_dir:
+        missing.append("Folder LP_images.files")
 
     if missing:
-        msg = "Nie znaleziono następujących plików w wybranym folderze:\n- " + "\n- ".join(missing)
+        msg = (
+            "Nie znaleziono następujących plików w wybranym folderze:\n- "
+            + "\n- ".join(missing)
+        )
         messagebox.showerror("Braki w plikach", msg)
         return
 
     # [2] Wykrywanie dostawcy
     print("\n[2/3] Wykrywanie dostawcy...")
     vendor_profile = auto_detect_vendor(csv_file, meta_file)
-    
+
     if vendor_profile:
         print(f"✓ Wykryto dostawcę: {vendor_profile.NAME}")
     else:
@@ -185,8 +201,8 @@ def main():
             return
         positions = get_positions_from_csv(csv_file)
         systems_map = {system: positions}
-    
-    print(f"\n📋 Wykryte systemy:")
+
+    print("\n📋 Wykryte systemy:")
     for sys_name, pos_list in systems_map.items():
         print(f"   {sys_name}: Poz. {', '.join(pos_list)}")
 
@@ -200,11 +216,11 @@ def main():
     # Funkcja get_project_prefix_from_met powinna działać też dla .REY/.ALI
     # pod warunkiem, że wewnątrz struktura jest tekstowa lub nazwa pliku jest kluczowa.
     prefix = get_project_prefix_from_met(meta_file)
-    
+
     all_positions = []
     for pos_list in systems_map.values():
         all_positions.extend(pos_list)
-    
+
     rk_images = get_rk_images_from_html(rk_html)
     rename_views(all_positions, rk_images, rk_dir, prefix, output_views)
 
@@ -222,14 +238,17 @@ def main():
             print(f"     {code}")
 
         rename_profiles_from_lp_html(
-            lp_html, lp_dir, output_profiles, vendor_profile,
-            allowed_codes=profile_codes
+            lp_html,
+            lp_dir,
+            output_profiles,
+            vendor_profile,
+            allowed_codes=profile_codes,
         )
 
     # KROK 3: Okucia
     print("\n[KROK 3/4] Parsowanie okuć z CSV...")
     hardware_codes = parse_hardware_from_csv(csv_file, vendor_profile)
-    
+
     # KROK 4: Kopiowanie okuć
     print("\n[KROK 4/4] Przetwarzanie okuć...")
     code_to_srcfile = build_hardware_mapping_from_lp_html(
@@ -238,15 +257,18 @@ def main():
     rename_hardware(hardware_codes, code_to_srcfile, lp_dir, output_hardware)
 
     # Audit
-    log_audit("IMAGES_PROCESSED", {
-        "project": project_name,
-        "vendor": vendor_key,
-        "source_dir": source_dir,
-        "meta_file": os.path.basename(meta_file),
-        "systems": list(systems_map.keys()),
-        "positions": len(all_positions),
-        "hardware": len(hardware_codes),
-    })
+    log_audit(
+        "IMAGES_PROCESSED",
+        {
+            "project": project_name,
+            "vendor": vendor_key,
+            "source_dir": source_dir,
+            "meta_file": os.path.basename(meta_file),
+            "systems": list(systems_map.keys()),
+            "positions": len(all_positions),
+            "hardware": len(hardware_codes),
+        },
+    )
 
     print("\n" + "=" * 60)
     print("✅ GOTOWE!")
@@ -260,8 +282,9 @@ def main():
         f"Plik: {os.path.basename(meta_file)}\n"
         f"Systemy: {systems_text}\n"
         f"Pozycje: {len(all_positions)}\n"
-        f"Okucia: {len(hardware_codes)}"
+        f"Okucia: {len(hardware_codes)}",
     )
+
 
 if __name__ == "__main__":
     main()
