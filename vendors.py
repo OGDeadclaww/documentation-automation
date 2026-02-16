@@ -234,10 +234,11 @@ class ReynaersProfile(VendorProfile):
     @classmethod
     def _parse_code(cls, code_text: str) -> tuple:
         """
-        Parsuje kod Reynaers.
-
         Returns:
-            tuple: (base_code, has_color) lub ("", False)
+            tuple: (formatted_code, has_color) lub ("", False)
+            
+            formatted_code zachowuje kropki:
+                "108.0081", "0S0.2703", "061.6634"
         """
         t = clean(code_text).upper()
         m = cls.CODE_RE.search(t)
@@ -248,25 +249,47 @@ class ReynaersProfile(VendorProfile):
         article = m.group(2)
         suffix = m.group(3) or ""
 
-        base_code = f"{group}{article}"
+        # Zachowaj format z kropkami
+        base_code = f"{group}.{article}"
         has_color = cls._is_color_suffix(suffix)
 
         return (base_code, has_color)
 
     @classmethod
     def parse_profile_code(cls, code_text: str) -> str:
+        """
+        Parsuje kod profilu Reynaers. Zachowuje kropki.
+        
+        Przykłady:
+            "108.0081.59 7021-2"              → "108.0081.X"
+            "408.0014.59 7021-2"              → "408.0014.X"
+            "408.0014.69 W:59 7047-2+Z:7021"  → "408.0014.X"
+            "108.1874.17"                     → "108.1874"
+            "0S0.2703.--"                     → "0S0.2703"
+            "061.6634.ZC"                     → "061.6634.X"
+        """
         base_code, has_color = cls._parse_code(code_text)
         if not base_code:
             return ""
-        return f"{base_code}X" if has_color else base_code
+        return f"{base_code}.X" if has_color else base_code
 
     @classmethod
     def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:
+        """
+        Parsuje kod okucia Reynaers. Zachowuje kropki.
+        
+        Przykłady:
+            "061.6634.ZC"                     → "061.6634.X"
+            "065.6566.59 7021-2"              → "065.6566.X"
+            "061.6461.--"                     → "061.6461"
+            "069.6831.04"                     → "069.6831"
+            "168.5000.00"                     → "168.5000"
+        """
         base_code, has_color = cls._parse_code(code_text)
         if not base_code:
             return ""
         if has_color or color_suffix:
-            return f"{base_code}X"
+            return f"{base_code}.X"
         return base_code
 
 # ============================================
