@@ -131,25 +131,32 @@ class TestAluProfHardware:
 class TestReynaersProfiles:
 
     @pytest.mark.parametrize("input_text, expected", [
-        ("108.0081.59 7021-2",              "108.0081.X"),
-        ("408.0014.59 7021-2",              "408.0014.X"),
-        ("508.0114.59 7021-2",              "508.0114.X"),
-        ("508.0892.59 7021-2",              "508.0892.X"),
-        ("408.0026.59 7021-2",              "408.0026.X"),
-        ("408.1028.59 7021-2",              "408.1028.X"),
-        ("065.6566.59 7021-2",              "065.6566.X"),
-        ("408.0014.69 W:59 7047-2+Z:59 7021-2", "408.0014.X"),
+        ("108.0081.59 7021-2",              "108.0081.XX"),
+        ("408.0014.59 7021-2",              "408.0014.XX"),
+        ("508.0114.59 7021-2",              "508.0114.XX"),
+        ("508.0892.59 7021-2",              "508.0892.XX"),
+        ("408.0026.59 7021-2",              "408.0026.XX"),
+        ("408.1028.59 7021-2",              "408.1028.XX"),
+        ("065.6566.59 7021-2",              "065.6566.XX"),
+        ("408.0014.69 W:59 7047-2+Z:59 7021-2", "408.0014.XX"),
     ])
     def test_with_color(self, input_text, expected):
         assert ReynaersProfile.parse_profile_code(input_text) == expected
 
     @pytest.mark.parametrize("input_text, expected", [
         ("108.1874.17",  "108.1874"),
-        ("0S0.2703.--",  "0S0.2703"),
-        ("0S0.7106.--",  "0S0.7106"),
-        ("0S0.9606.--",  "0S0.9606"),
     ])
-    def test_no_color(self, input_text, expected):
+    def test_variant_no_color(self, input_text, expected):
+        assert ReynaersProfile.parse_profile_code(input_text) == expected
+
+    @pytest.mark.parametrize("input_text, expected", [
+        ("0S0.2703.--",  "0S0.2703.--"),
+        ("0S0.7106.--",  "0S0.7106.--"),
+        ("0S0.9606.--",  "0S0.9606.--"),
+        ("0S1.2206.--",  "0S1.2206.--"),
+        ("061.6461.--",  "061.6461.--"),
+    ])
+    def test_double_dash(self, input_text, expected):
         assert ReynaersProfile.parse_profile_code(input_text) == expected
 
     @pytest.mark.parametrize("input_text", [
@@ -164,23 +171,28 @@ class TestReynaersProfiles:
 class TestReynaersHardware:
 
     @pytest.mark.parametrize("input_text, expected", [
-        ("061.6634.ZC",         "061.6634.X"),
-        ("065.6566.59 7021-2",  "065.6566.X"),
-        ("061.8527.ZC",         "061.8527.X"),
+        ("061.6634.ZC",         "061.6634.XX"),
+        ("065.6566.59 7021-2",  "065.6566.XX"),
+        ("061.8527.ZC",         "061.8527.XX"),
     ])
     def test_with_color(self, input_text, expected):
         assert ReynaersProfile.parse_hardware_code(input_text) == expected
 
     @pytest.mark.parametrize("input_text, expected", [
-        ("061.6461.--",  "061.6461"),
-        ("061.6681.--",  "061.6681"),
+        ("061.6461.--",  "061.6461.--"),
+        ("061.6681.--",  "061.6681.--"),
+        ("0S0.2703.--",  "0S0.2703.--"),
+        ("168.5012.--",  "168.5012.--"),
+    ])
+    def test_double_dash(self, input_text, expected):
+        assert ReynaersProfile.parse_hardware_code(input_text) == expected
+
+    @pytest.mark.parametrize("input_text, expected", [
         ("069.6831.04",  "069.6831"),
         ("168.5000.00",  "168.5000"),
-        ("168.5012.--",  "168.5012"),
         ("169.8748.04",  "169.8748"),
-        ("0S0.2703.--",  "0S0.2703"),
     ])
-    def test_no_color(self, input_text, expected):
+    def test_neutral_suffix(self, input_text, expected):
         assert ReynaersProfile.parse_hardware_code(input_text) == expected
 
     @pytest.mark.parametrize("input_text", [
@@ -198,14 +210,13 @@ class TestReynaersSpecialCodes:
         result = ReynaersProfile.parse_profile_code(
             "408.0014.69 W:59 7047-2+Z:59 7021-2"
         )
-        assert result == "408.0014.X"
+        assert result == "408.0014.XX"
 
-    def test_0S0_profile(self):
-        assert ReynaersProfile.parse_profile_code("0S0.2703.--") == "0S0.2703"
+    def test_0S0_double_dash(self):
+        assert ReynaersProfile.parse_profile_code("0S0.2703.--") == "0S0.2703.--"
 
-    def test_0S1_profile(self):
-        assert ReynaersProfile.parse_profile_code("0S1.2206.--") == "0S1.2206"
-
+    def test_0S1_double_dash(self):
+        assert ReynaersProfile.parse_profile_code("0S1.2206.--") == "0S1.2206.--"
 # ============================================
 # TESTY REJESTR DOSTAWCÓW
 # ============================================
