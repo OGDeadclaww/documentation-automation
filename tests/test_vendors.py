@@ -3,7 +3,7 @@
 Testy parsowania kodów profili i okuć.
 """
 import pytest
-from vendors import AluProfProfile, GenericProfile, clean, VENDOR_PROFILES
+from vendors import AluProfProfile, GenericProfile, clean, VENDOR_PROFILES, ReynaersProfile
 
 
 # ============================================
@@ -124,6 +124,91 @@ class TestAluProfHardware:
     def test_no_match(self, input_text):
         assert AluProfProfile.parse_hardware_code(input_text) == ""
 
+# ============================================
+# TESTY ReynaersProfile - PROFILE
+# ============================================
+
+class TestReynaersProfiles:
+    """Testy parse_profile_code dla Reynaers."""
+
+    @pytest.mark.parametrize("input_text, expected", [
+        ("108.0081.59 7021-2", "1080081X"),
+        ("408.0014.59 7021-2", "4080014X"),
+        ("508.0114.59 7021-2", "5080114X"),
+        ("508.0892.59 7021-2", "5080892X"),
+        ("408.0026.59 7021-2", "4080026X"),
+        ("408.1028.59 7021-2", "4081028X"),
+        ("065.6566.59 7021-2", "0656566X"),
+    ])
+    def test_with_ral_color(self, input_text, expected):
+        assert ReynaersProfile.parse_profile_code(input_text) == expected
+
+    @pytest.mark.parametrize("input_text, expected", [
+        ("108.1874.17", "1081874"),
+    ])
+    def test_variant_no_color(self, input_text, expected):
+        assert ReynaersProfile.parse_profile_code(input_text) == expected
+
+    @pytest.mark.parametrize("input_text", [
+        "",
+        "hello world",
+        "K51 8143",
+    ])
+    def test_no_match(self, input_text):
+        assert ReynaersProfile.parse_profile_code(input_text) == ""
+
+
+class TestReynaersHardware:
+    """Testy parse_hardware_code dla Reynaers."""
+
+    @pytest.mark.parametrize("input_text, expected", [
+        ("061.6634.ZC",         "0616634X"),
+        ("065.6566.59 7021-2",  "0656566X"),
+    ])
+    def test_with_color(self, input_text, expected):
+        assert ReynaersProfile.parse_hardware_code(input_text) == expected
+
+    @pytest.mark.parametrize("input_text, expected", [
+        ("061.6461.--",  "0616461"),
+        ("061.6681.--",  "0616681"),
+        ("061.7054.--",  "0617054"),
+        ("061.8154.--",  "0618154"),
+        ("065.6571.--",  "0656571"),
+    ])
+    def test_no_color_dashes(self, input_text, expected):
+        assert ReynaersProfile.parse_hardware_code(input_text) == expected
+
+    @pytest.mark.parametrize("input_text, expected", [
+        ("069.6831.04",  "0696831"),
+        ("069.8360.04",  "0698360"),
+        ("069.8426.04",  "0698426"),
+        ("069.8427.04",  "0698427"),
+        ("069.8511.04",  "0698511"),
+        ("069.8512.04",  "0698512"),
+    ])
+    def test_variant_suffix(self, input_text, expected):
+        assert ReynaersProfile.parse_hardware_code(input_text) == expected
+
+    @pytest.mark.parametrize("input_text, expected", [
+        ("168.5000.00",  "1685000"),
+        ("168.5012.--",  "1685012"),
+        ("168.7073.00",  "1687073"),
+        ("168.7088.00",  "1687088"),
+        ("168.7104.00",  "1687104"),
+        ("168.8074.00",  "1688074"),
+        ("168.8104.00",  "1688104"),
+        ("169.8748.04",  "1698748"),
+    ])
+    def test_standard_neutral(self, input_text, expected):
+        assert ReynaersProfile.parse_hardware_code(input_text) == expected
+
+    @pytest.mark.parametrize("input_text", [
+        "",
+        "hello",
+        "K51 8143",
+    ])
+    def test_no_match(self, input_text):
+        assert ReynaersProfile.parse_hardware_code(input_text) == ""
 
 # ============================================
 # TESTY REJESTR DOSTAWCÓW
