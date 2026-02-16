@@ -2,6 +2,7 @@
 """
 Główny skrypt orkiestrujący przetwarzanie obrazków.
 Wersja z automatycznym wykrywaniem plików w folderze źródłowym.
+Obsługuje rozszerzenia: .MET (Aluprof), .REY (Reynaers), .ALI (Aliplast).
 """
 import os
 import glob
@@ -39,9 +40,9 @@ def find_file_by_pattern(folder, pattern, description):
     files = glob.glob(os.path.join(folder, pattern))
     if not files:
         return None
-    # Jeśli znaleziono wiele, preferuj ten najnowszy lub najkrótszy?
-    # Bierzemy pierwszy pasujący.
-    print(f"   ✓ Znaleziono {description}: {os.path.basename(files[0])}")
+    # Jeśli znaleziono wiele, bierzemy pierwszy
+    filename = os.path.basename(files[0])
+    print(f"   ✓ Znaleziono {description}: {filename}")
     return files[0]
 
 def find_folder_by_pattern(folder, pattern, description):
@@ -50,18 +51,29 @@ def find_folder_by_pattern(folder, pattern, description):
     dirs = [p for p in paths if os.path.isdir(p)]
     if not dirs:
         return None
-    print(f"   ✓ Znaleziono {description}: {os.path.basename(dirs[0])}")
+    dirname = os.path.basename(dirs[0])
+    print(f"   ✓ Znaleziono {description}: {dirname}")
     return dirs[0]
 
-def auto_detect_vendor(csv_file):
-    """Próbuje wykryć dostawcę na podstawie systemu w CSV."""
-    print("   🔍 Analiza CSV w celu wykrycia dostawcy...")
+def auto_detect_vendor(csv_file, meta_file):
+    """
+    Próbuje wykryć dostawcę na podstawie systemu w CSV 
+    oraz rozszerzenia pliku meta (.REY, .ALI).
+    """
+    print("   🔍 Analiza danych w celu wykrycia dostawcy...")
+
+    # 1. Sprawdzenie po rozszerzeniu pliku
+    if meta_file:
+        ext = os.path.splitext(meta_file)[1].lower()
+        if ext == ".rey":
+            return VENDOR_PROFILES["reynaers"]
+        if ext == ".ali":
+            # Zakładamy, że Aliplast używa parsera Aluprof (zgodnie z vendors.py)
+            return VENDOR_PROFILES["aliplast"]
     
-    # Próbujemy znaleźć system (np. "mb-86", "masterline-8")
+    # 2. Analiza CSV (System)
     sys_name = extract_system_from_csv(csv_file)
-    
     if not sys_name:
-        # Fallback: szukamy systemów w pozycjach
         systems_map = get_positions_with_systems(csv_file)
         if systems_map:
             sys_name = list(systems_map.keys())[0]
@@ -71,12 +83,11 @@ def auto_detect_vendor(csv_file):
 
     sys_lower = sys_name.lower()
 
-    # Logika mapowania system -> dostawca
     if "mb-" in sys_lower:
         return VENDOR_PROFILES["aluprof"]
-    if "masterline" in sys_lower or "cs-" in sys_lower or "cp-" in sys_lower or "slimline" in sys_lower or "hi-finity" in sys_lower:
+    if any(x in sys_lower for x in ["masterline", "cs-", "cp-", "slimline", "hi-finity"]):
         return VENDOR_PROFILES["reynaers"]
-    if "aliplast" in sys_lower: # przykładowo
+    if "aliplast" in sys_lower:
         return VENDOR_PROFILES["aliplast"]
     
     return None
@@ -88,22 +99,30 @@ def main():
 
     check_authorization()
 
-    # [1] Wybierz folder źródłowy z plikami
+    # [1] Wybierz folder źródłowy
     print("\n[1/3] Wybierz folder z wyeksportowanymi plikami (źródło)...")
-    source_dir = select_folder("Wybierz folder z plikami (.MET, .CSV, .HTML)")
+    source_dir = select_folder("Wybierz folder z plikami (.MET/.REY, CSV, HTML)")
     if not source_dir:
         print("Anulowano.")
         return
 
     print(f"📂 Źródło: {source_dir}\n")
 
-    # Automatyczne szukanie plików
-    met_file = find_file_by_pattern(source_dir, "*.met", "Plik MET")
-    csv_file = find_file_by_pattern(source_dir, "*dane*.csv", "Plik CSV") # Zazwyczaj LP_dane.csv
-    if not csv_file:
-         # Fallback jeśli nazwa inna
-         csv_file = find_file_by_pattern(source_dir, "*.csv", "Plik CSV (alternatywny)")
+    # --- Automatyczne szukanie plików ---
+    
+    # 1. Plik projektu (MET / REY / ALI)
+    meta_file = find_file_by_pattern(source_dir, "*.met", "Plik Aluprof (.MET)")
+    if not meta_file:
+        meta_file = find_file_by_pattern(source_dir, "*.rey", "Plik Reynaers (.REY)")
+    if not meta_file:
+        meta_file = find_file_by_pattern(source_dir, "*.ali", "Plik Aliplast (.ALI)")
 
+    # 2. Plik CSV
+    csv_file = find_file_by_pattern(source_dir, "*dane*.csv", "Plik CSV")
+    if not csv_file:
+         csv_file = find_file_by_pattern(source_dir, "*.csv", "Plik CSV (alt)")
+
+    # 3. HTML i foldery
     rk_html = find_file_by_pattern(source_dir, "*RK*images.html", "RK HTML")
     rk_dir = find_folder_by_pattern(source_dir, "*RK*images.files", "RK Folder")
     
@@ -112,7 +131,7 @@ def main():
 
     # Weryfikacja braków
     missing = []
-    if not met_file: missing.append("Plik .MET")
+    if not meta_file: missing.append("Plik projektu (.MET / .REY / .ALI)")
     if not csv_file: missing.append("Plik CSV (dane)")
     if not rk_html: missing.append("RK_images.html")
     if not rk_dir: missing.append("Folder RK_images.files")
@@ -126,19 +145,19 @@ def main():
 
     # [2] Wykrywanie dostawcy
     print("\n[2/3] Wykrywanie dostawcy...")
-    vendor_profile = auto_detect_vendor(csv_file)
+    vendor_profile = auto_detect_vendor(csv_file, meta_file)
     
     if vendor_profile:
         print(f"✓ Wykryto dostawcę: {vendor_profile.NAME}")
     else:
         print("⚠️ Nie udało się wykryć dostawcy automatycznie.")
-        vendor_profile = select_vendor() # Manualny wybór
+        vendor_profile = select_vendor()
         if not vendor_profile:
             return
 
     vendor_key = vendor_profile.KEY
 
-    # Wykrywanie kolorów (potwierdzenie usera)
+    # Wykrywanie kolorów
     print("    Wykrywanie koloru projektu...")
     detected_colors = extract_color_codes_from_csv(csv_file)
     confirm_detected_colors(detected_colors)
@@ -152,8 +171,7 @@ def main():
         return
     print(f"✓ Projekt docelowy: {project_name}\n")
 
-
-    # Przetwarzanie (reszta logiki bez zmian)
+    # --- PRZETWARZANIE ---
     print("=" * 60)
     print(f"PRZETWARZANIE - Dostawca: {vendor_profile.NAME}")
     print("=" * 60)
@@ -179,7 +197,10 @@ def main():
 
     # KROK 1: Rzuty
     print("\n[KROK 1/4] Przetwarzanie rzutów...")
-    prefix = get_project_prefix_from_met(met_file)
+    # Funkcja get_project_prefix_from_met powinna działać też dla .REY/.ALI
+    # pod warunkiem, że wewnątrz struktura jest tekstowa lub nazwa pliku jest kluczowa.
+    prefix = get_project_prefix_from_met(meta_file)
+    
     all_positions = []
     for pos_list in systems_map.values():
         all_positions.extend(pos_list)
@@ -221,6 +242,7 @@ def main():
         "project": project_name,
         "vendor": vendor_key,
         "source_dir": source_dir,
+        "meta_file": os.path.basename(meta_file),
         "systems": list(systems_map.keys()),
         "positions": len(all_positions),
         "hardware": len(hardware_codes),
@@ -235,6 +257,7 @@ def main():
         f"Obrazki przetworzone!\n\n"
         f"Projekt: {project_name}\n"
         f"Dostawca: {vendor_profile.NAME}\n"
+        f"Plik: {os.path.basename(meta_file)}\n"
         f"Systemy: {systems_text}\n"
         f"Pozycje: {len(all_positions)}\n"
         f"Okucia: {len(hardware_codes)}"
