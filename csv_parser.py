@@ -389,3 +389,61 @@ def get_profile_codes_from_csv(csv_path: str, vendor_profile) -> set:
                 profiles.add(code)
 
     return profiles
+
+def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
+    """
+    Wyciąga kody profili pogrupowane wg systemu.
+    Każda pozycja ma swój system i swoje profile.
+    
+    Returns:
+        dict: {system: set(kody_profili)}
+        
+    Przykład:
+        {
+            "masterline-8": {"108.0081.X", "408.0014.X", ...},
+            "cs-77": {"108.0081.X", "008.3125.X", "0S0.2703", ...}
+        }
+    """
+    rows = _read_csv_rows(csv_path)
+    systems = {}
+    current_system = None
+    current_section = None
+
+    for row in rows:
+        r = [clean(c) for c in row]
+        line = ";".join(r)
+
+        # Wykryj pozycję i jej system
+        match = POZ_LINE_RE.search(line)
+        if match:
+            detected = _detect_system_in_line(line)
+            if detected:
+                current_system = detected
+                current_section = None
+                if current_system not in systems:
+                    systems[current_system] = set()
+                continue
+
+        if not current_system:
+            continue
+
+        # Wykryj sekcję
+        if r and r[0]:
+            first = r[0].strip()
+            if re.match(r"^Profile(\s+dodatkowe)?\s*$", first, re.IGNORECASE):
+                current_section = "profile"
+                continue
+            elif re.match(r"^(Uszczelki|Akcesoria|Okucia|Izolacyjność)", first, re.IGNORECASE):
+                current_section = None
+                continue
+
+        if current_section != "profile":
+            continue
+
+        # Parsuj kody profili
+        for cell in r:
+            code = vendor_profile.parse_profile_code(cell)
+            if code:
+                systems[current_system].add(code)
+
+    return systems
