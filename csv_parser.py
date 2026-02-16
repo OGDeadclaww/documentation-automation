@@ -351,3 +351,86 @@ def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
                 systems[current_system].add(code)
 
     return systems
+
+# csv_parser.py (dodaj to na końcu pliku)
+
+def get_data_for_position(csv_path: str, position_number: str, vendor_profile) -> dict:
+    """
+    Zwraca profile i okucia przypisane konkretnie do danej pozycji.
+    To jest trudne w CSV, bo dane są często rozrzucone,
+    więc tutaj zrobimy proste przybliżenie na podstawie sekcji.
+    """
+    rows = _read_csv_rows(csv_path)
+    data = {
+        "profiles": [],
+        "hardware": []
+    }
+    
+    current_pos = None
+    
+    for row in rows:
+        line = ";".join(row)
+        
+        # 1. Wykryj pozycję
+        if "Poz." in line:
+            m = POZ_LINE_RE.search(line)
+            if m:
+                current_pos = m.group(1)
+            else:
+                current_pos = None # Reset jeśli nie udało się sparsować numeru
+            continue
+            
+        # Jeśli nie jesteśmy w szukanej pozycji, pomiń
+        if current_pos != position_number:
+            continue
+            
+        # Jesteśmy wewnątrz naszej pozycji
+        r = [clean(c) for c in row]
+        if not any(r): continue 
+
+        # --- ZMIANA TUTAJ: Bardziej restrykcyjna pętla ---
+        # Zamiast szukać w 3 kolumnach, szukamy tylko w pierwszej niepustej, 
+        # która wygląda na kod.
+        
+        found_profile = False
+        # Szukamy tylko w kolumnach 0 i 1 (zazwyczaj tam jest kod)
+        for i in range(min(len(r), 2)): 
+            cell = r[i]
+            if not cell: continue
+            
+            # Próba parsowania
+            prof_code = vendor_profile.parse_profile_code(cell)
+            
+            # Dodatkowy filtr: Kod musi mieć min. 5 znaków, żeby odsiać np. "L" czy "1"
+            if prof_code and len(prof_code) > 4:
+                # To prawdopodobnie profil
+                # Opis jest zazwyczaj w następnej kolumnie
+                desc_idx = i + 1
+                desc = r[desc_idx] if len(r) > desc_idx else "Profil"
+                
+                # Ilość i wymiar to heurystyka (zgadywanie)
+                # Często: Kod | Opis | Ilość | Jedn | Wymiar
+                qty = "1"
+                dims = ""
+                # Szukamy cyfr w dalszych kolumnach
+                for j in range(i + 2, min(len(r), i + 6)):
+                    val = r[j].lower()
+                    if "szt" in val or val.isdigit() or "," in val:
+                         if not qty or qty == "1": qty = r[j]
+                    if "mm" in val or (val.replace(".", "").isdigit() and len(val)>2):
+                         dims = r[j]
+
+                data["profiles"].append({
+                    "code": prof_code,
+                    "desc": desc,
+                    "quantity": qty,
+                    "dimensions": dims,
+                    "location": "—"
+                })
+                found_profile = True
+                break # Znaleziono w tym wierszu, koniec
+        
+        if found_profile:
+            continue
+
+    return data

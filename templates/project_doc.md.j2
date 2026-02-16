@@ -1,0 +1,188 @@
+---
+puppeteer:
+  path: "{{ pdf_output_path }}"
+  format: "A4"
+  margin:
+    top: "2cm"
+    bottom: "2cm"
+---
+
+<img src="{{ logo_path }}" alt="Logo" style="display: block; margin: 0 auto; width: 200px;">
+
+---
+
+<div style="text-align: center">
+
+# {{ project_name }} <br><span style="color:red">{{ project_id }}</span>
+
+</div>
+
+---
+
+# Spis Treści
+- [Dokumentacja](#dokumentacja)
+- [📚 Katalogi Systemowe](#-katalogi-systemowe)
+- [🔩 Tabela Okuć i Akcesoriów](#-tabela-okuć-i-akcesoriów)
+{% for system_name in systems %}
+- [{{ system_name }}](#{{ system_name | lower | replace(' ', '-') }})
+{% endfor %}
+
+---
+
+# <h id="dokumentacja" style="color:WHITE">Dokumentacja</span>
+
+[⬆️ Spis Treści](#spis-treści)
+
+<div style="page-break-inside: avoid;">
+
+| Dokument | Data | Link |
+| :-- | :--: | :--: |
+{% for doc in documents -%}
+| {{ doc.name }} | {{ doc.date }} | [📄 Otwórz]({{ doc.path }}) |
+{% endfor %}
+
+</div>
+
+---
+
+# 📚 Katalogi Systemowe
+
+[🔝 Spis Treści](#spis-treści)
+
+<div style="page-break-inside: avoid;">
+
+| System | Data wydania | Status | Katalog |
+| :-- | :--: | :--: | :--: |
+{% for cat in catalogs -%}
+| **{{ cat.name }}** | {{ cat.date }} | {{ cat.status_icon }} {{ cat.status_text }} | [📄 Otwórz]({{ cat.path }}) |
+{% endfor %}
+
+</div>
+
+---
+
+# 🔩 Tabela Okuć i Akcesoriów
+
+[🔝 Spis Treści](#spis-treści)
+
+> **Legenda:**
+> 🟢 Zweryfikowane | 🟡 Do sprawdzenia | 🔴 Brak w katalogu | — Brak Strony |📐 Wymaga obróbki CNC
+
+| Kod | Opis | Rysunek | Katalog | Status | Uwagi |
+| :--: | :-- | :--: | :--: | :--: | :-- |
+{% for hw in global_hardware -%}
+| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | [📄 Otwórz]({{ hw.catalog_link }}) | {{ hw.status }} | {{ hw.notes }} |
+{% endfor %}
+
+---
+
+### 📖 Instrukcje montażowe
+
+[⬆️ Spis Treści](#spis-treści)
+
+<div style="page-break-inside: avoid;">
+
+| Operacja | {% for sys in systems %}{{ sys }} | {% endfor %}
+| :-- |{% for sys in systems %} :--: |{% endfor %}
+{% for instr in instructions -%}
+| {{ instr.name }} | {% for sys in systems %}{{ instr.links.get(sys, '—') }} | {% endfor %}
+{% endfor %}
+
+</div>
+
+---
+
+<div style="page-break-before: always;"></div>
+
+{# --- PĘTLA PO SYSTEMACH --- #}
+{% for system_name, positions in systems_data.items() %}
+
+# <h id="{{ system_name | lower | replace(' ', '-') }}" style="color:GOLD">{{ system_name }}</h>
+
+---
+
+    {# --- PĘTLA PO POZYCJACH W SYSTEMIE --- #}
+    {% for pos in positions %}
+
+## <h id="poz-{{ pos.number }}" style="color:CYAN">Poz. {{ pos.number }}</h>
+
+---
+
+### Rzut
+
+[⬆️ Spis Treści](#spis-treści)
+
+![]({{ pos.view_image_path }})
+
+---
+
+### <h id="profile-{{ pos.number }}" style="color:MAGENTA">Profile</h>
+
+[⬆️ Spis Treści](#spis-treści)
+
+<div style="page-break-inside: avoid;">
+
+| Kod | Opis | Rysunek | Ilość | Wymiary | Położenie |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+{% for prof in pos.profiles -%}
+| {{ prof.code }} | {{ prof.desc }} | ![]({{ prof.image_path }}) | {{ prof.quantity }} | {{ prof.dimensions }} | {{ prof.location }} |
+{% endfor %}
+
+</div>
+
+---
+
+### <h id="obrobki-{{ pos.number }}" style="color:RED">Obróbki</h>
+
+[⬆️ Spis Treści](#spis-treści)
+
+| Kod + Opis | Rysunek | Ilość | Katalog | UWAGI |
+| :-: | :-: | :-: | :-: | :-: |
+{% for hw in pos.hardware -%}
+| `{{ hw.code }}` <br> {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [Strona z Katalogu 👈]({{ hw.catalog_link }}) | [Checklista](#checklist-{{ hw.code }}-{{ pos.number }}) |
+{% endfor %}
+
+---
+
+### Checklista Poz. {{ pos.number }}
+
+[⬆️ Spis Treści](#spis-treści)
+
+| ✓ | Kod | Ilość | Opis | Katalog |
+| :--: | :--: | :--: | :-- | :--: |
+{% for hw in pos.hardware -%}
+| <input type="checkbox"> | `{{ hw.code }}` | {{ hw.quantity }} | {{ hw.desc }} | [📄](#checklist-{{ hw.code }}-{{ pos.number }}) |
+{% endfor %}
+
+---
+
+        {# --- DETALE OBRÓBEK DLA POZYCJI --- #}
+        {% for hw in pos.hardware %}
+#### <span id="checklist-{{ hw.code }}-{{ pos.number }}">{{ hw.code }}</span>
+- [ ] `{{ hw.code }}`  -   `{{ hw.quantity }}`
+  - {{ hw.desc }}
+    - [Strona z Katalogu 👈]({{ hw.catalog_link }})
+
+        {% endfor %}
+
+[⬆️ Spis Treści](#spis-treści)
+
+---
+
+<hr style="border: 2px solid cyan; margin: 30px 0;">
+
+    {% endfor %} {# Koniec pętli pozycji #}
+
+<div style="page-break-before: always;"></div>
+
+{% endfor %} {# Koniec pętli systemów #}
+
+---
+
+<div style="page-break-before: auto;"></div>
+
+| | |
+| :-- | :-- |
+| **Dokumentacja:** | v1.0 — {{ generation_date }} |
+| **Sporządził:** | {{ author }} |
+| **Źródła:** | [📄 Dokumentacja](#dokumentacja) |
