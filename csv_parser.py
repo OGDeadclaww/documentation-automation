@@ -10,6 +10,8 @@ import csv
 from config import POZ_LINE_RE, SECTION_RE
 from vendors import clean
 
+POZ_LINE_RE_REYNAERS = re.compile(r"Poz\.\s*(\d+)")
+SYSTEM_KEYWORDS = ["MB-", "MasterLine", "CS-", "CP-", "SlimLine", "Hi-Finity"]
 
 # ============================================
 # WEWNĘTRZNE HELPERS
@@ -43,23 +45,18 @@ def _read_csv_rows(csv_path: str) -> list:
 def get_positions_from_csv(csv_path: str) -> list:
     """
     Wyciąga numery pozycji z CSV.
-    Szuka wierszy zawierających "Poz." i "MB-".
-    
-    Args:
-        csv_path: Ścieżka do pliku CSV
-    
-    Returns:
-        list: Lista numerów pozycji jako stringi (np. ["1", "2", "5"])
-    
-    Przykład wiersza CSV:
-        "Poz. 1;;MB-78EI;Drzwi;..."
+    Obsługuje Aluprof (MB-) i Reynaers (MasterLine, CS-77, etc.)
     """
     rows = _read_csv_rows(csv_path)
     positions = []
 
     for row in rows:
         line = ";".join(row)
-        if "Poz." in line and "MB-" in line:
+        if "Poz." not in line:
+            continue
+        # Sprawdź czy linia zawiera jakikolwiek znany system
+        has_system = any(kw in line for kw in SYSTEM_KEYWORDS)
+        if has_system:
             match = POZ_LINE_RE.search(line)
             if match:
                 positions.append(match.group(1))
@@ -73,42 +70,42 @@ def get_positions_from_csv(csv_path: str) -> list:
 
 def extract_system_from_csv(csv_path: str) -> str:
     """
-    Wykrywa system profili z sekcji "System:" w CSV.
-    
-    Args:
-        csv_path: Ścieżka do pliku CSV
-    
-    Returns:
-        str: Nazwa systemu (np. "mb-78ei") lub None
-    
-    Szuka wzorca:
-        Wiersz N:   "System:"
-        Wiersz N+1: "MB-78EI HI"  →  "mb-78ei"
+    Wykrywa system profili z CSV.
+    Obsługuje Aluprof (MB-XX) i Reynaers (MasterLine8, CS-77, etc.)
     """
     rows = _read_csv_rows(csv_path)
 
     for i, row in enumerate(rows):
-        # Szukaj wiersza z "System:"
         if not any("System:" in str(cell) for cell in row):
             continue
 
-        # Sprawdź następny wiersz
         if i + 1 >= len(rows):
             continue
 
         for cell in rows[i + 1]:
             cell_clean = clean(cell).upper()
-            if not re.match(r"MB-\d+", cell_clean, re.IGNORECASE):
-                continue
 
-            # Usuń warianty (HI/SI/EI/HS) i normalizuj
-            system = re.sub(
-                r"\s*(HI|SI).*", "",
-                cell_clean,
-                flags=re.IGNORECASE
-            ).strip().lower()
-            system = re.sub(r"\s+", "", system)
-            return system
+            # Aluprof: MB-78EI HI → mb-78ei
+            if re.match(r"MB-\d+", cell_clean):
+                system = re.sub(
+                    r"\s+(HI|SI)\b.*", "",
+                    cell_clean, flags=re.IGNORECASE
+                ).strip().lower()
+                system = re.sub(r"\s+", "", system)
+                return system
+
+            # Reynaers: MasterLine8 HI+ → masterline-8
+            m = re.match(r"(MASTERLINE)\s*(\d+)", cell_clean)
+            if m:
+                system = f"masterline-{m.group(2)}"
+                # Usuń warianty HI+/SI
+                return system.lower()
+
+            # Reynaers: CS-77 BP → cs-77
+            m = re.match(r"(CS|CP|SLIMLINE|HI-FINITY)-?\s*(\d+)", cell_clean)
+            if m:
+                system = f"{m.group(1).lower()}-{m.group(2)}"
+                return system
 
     return None
 
@@ -188,9 +185,8 @@ def extract_color_codes_from_csv(csv_path: str) -> list:
 
 def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
     """
-    Parsuje kody okuć i akcesoriów z CSV.
-    X dodawany TYLKO gdy okucie ma kolor w swoim kodzie,
-    NIE globalnie na podstawie koloru projektu.
+    Parsuje kody okuć z CSV.
+    Obsługuje Aluprof (MB-) i Reynaers (MasterLine, CS-77, etc.)
     """
     rows = _read_csv_rows(csv_path)
 
@@ -202,15 +198,19 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
         r = [clean(c) for c in row]
         line = ";".join(r)
 
+        # Nowa pozycja - obsłuż oba formaty
         mpos = POZ_LINE_RE.search(line)
-        if mpos and "MB-" in line:
-            current_pos = mpos.group(1)
-            current_section = None
-            continue
+        if mpos:
+            has_system = any(kw in line for kw in SYSTEM_KEYWORDS)
+            if has_system:
+                current_pos = mpos.group(1)
+                current_section = None
+                continue
 
         if not current_pos:
             continue
 
+        # Nowa sekcja
         if r and r[0] and SECTION_RE.match(r[0]):
             sec = SECTION_RE.match(r[0]).group(1).capitalize()
             current_section = sec if sec in ("Akcesoria", "Okucia") else None
@@ -219,7 +219,7 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
         if current_section not in ("Akcesoria", "Okucia"):
             continue
 
-        # Parsuj BEZ wymuszania koloru - niech parser sam wykryje
+        # Parsuj kod
         joined = " ".join(x for x in r if x)
         code_hw = vendor_profile.parse_hardware_code(joined, color_suffix=None)
         if not code_hw:

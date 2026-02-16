@@ -210,6 +210,32 @@ class TestReynaersHardware:
     def test_no_match(self, input_text):
         assert ReynaersProfile.parse_hardware_code(input_text) == ""
 
+class TestReynaersSpecialCodes:
+    """Testy dla specjalnych kodów Reynaers."""
+
+    def test_0S0_code(self):
+        """0S0 = zero-S-zero (nie trzy cyfry)."""
+        assert ReynaersProfile.parse_profile_code("0S0.2703.--") == "0S02703"
+
+    def test_0S0_hardware(self):
+        assert ReynaersProfile.parse_hardware_code("0S0.2703.--") == "0S02703"
+
+    def test_0S0_9606(self):
+        assert ReynaersProfile.parse_hardware_code("0S0.9606.--") == "0S09606"
+
+    def test_dual_color_69(self):
+        """69 = dwukolorowy lakier → kolor → X."""
+        result = ReynaersProfile.parse_profile_code(
+            "408.0014.69 W:59 7047-2+Z:59 7021-2"
+        )
+        assert result == "4080014X"
+
+    def test_dual_color_hardware(self):
+        result = ReynaersProfile.parse_hardware_code(
+            "508.0120.69 W:59 7047-2+Z:59 7021-2"
+        )
+        assert result == "5080120X"
+
 # ============================================
 # TESTY REJESTR DOSTAWCÓW
 # ============================================

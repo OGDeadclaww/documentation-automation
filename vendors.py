@@ -180,85 +180,62 @@ class AluProfProfile(VendorProfile):
 # ============================================
 
 class ReynaersProfile(VendorProfile):
-    """
-    Parser kodów Reynaers.
-    
-    Format: XXX.XXXX.YY [RAL]
-    
-    Profile:
-        "108.0081.59 7021-2"  → "1080081X"   (kolor RAL → X)
-        "408.0014.59 7021-2"  → "4080014X"
-        "108.1874.17"         → "1081874"    (wariant, nie kolor)
-        
-    Akcesoria:
-        "069.6831.04"         → "0696831"    (04 = standardowy)
-        "168.5012.--"         → "1685012"    (-- = bez koloru)
-        "069.8360.04"         → "0698360"
-        
-    Okucia:
-        "061.6634.ZC"         → "0616634X"   (ZC = kolor → X)
-        "065.6566.59 7021-2"  → "0656566X"   (kolor RAL → X)
-        "061.6461.--"         → "0616461"    (-- = bez koloru)
-    """
     NAME = "Reynaers"
     KEY = "reynaers"
 
-    # Główny regex: XXX.XXXX z opcjonalnym sufiksem
-    # Grupa 1: XXX (3 cyfry)
-    # Grupa 2: XXXX (4 cyfry)
-    # Grupa 3: sufiks po drugiej kropce (opcjonalny)
+    # Poprawiony regex: pierwsza grupa może mieć litery (0S0)
     CODE_RE = re.compile(
-        r"\b(\d{3})\.(\d{4})\.(\S+(?:\s+\d{4}-?\d)?)?",
+        r"\b(\d[A-Z0-9]\d)\.(\d{4})\.(\S+(?:\s+\S+)*)?",
         re.IGNORECASE
     )
 
-    # Sufiksy oznaczające KOLOR (→ X)
-    # "59 7021-2" = RAL lakierowany
-    # "ZC" = cynk
-    # Litery + opcjonalne cyfry (nie "00", "--", czyste 2-cyfrowe numery)
     COLOR_SUFFIX_RE = re.compile(
-        r"(?:\d{2}\s+\d{4}(?:-\d)?|[A-Z]{2,})",
+        r"(?:\d{2}\s+\d{4}(?:-\d)?|[A-Z]{2,}|\d{2}\s+W:)",
         re.IGNORECASE
     )
 
-    # Sufiksy NIE będące kolorem
-    # "00" = standard
-    # "--" = brak
-    # "04", "07", "17" = wariant materiałowy
     NEUTRAL_SUFFIXES = {"00", "--"}
 
     @classmethod
     def _is_color_suffix(cls, suffix: str) -> bool:
         """
         Sprawdza czy sufiks oznacza kolor.
-        
+
         Kolor:
-            "59 7021-2"  → True  (RAL)
-            "ZC"         → True  (cynk)
-            
+            "59 7021-2"                    → True (RAL jednolity)
+            "69 W:59 7047-2+Z:59 7021-2"   → True (RAL dwukolorowy)
+            "ZC"                            → True (cynk)
+
         Nie kolor:
-            "00"         → False (standard)
-            "--"         → False (brak)
-            "04"         → False (wariant)
-            "07"         → False (wariant)
-            "17"         → False (wariant)
+            "00"  → False (standard)
+            "--"  → False (brak)
+            "04"  → False (wariant)
+            "07"  → False (wariant)
+            "14"  → False (wariant)
+            "17"  → False (wariant)
         """
         if not suffix:
             return False
         suffix = suffix.strip()
         if suffix in cls.NEUTRAL_SUFFIXES:
             return False
-        # Czyste 2-cyfrowe numery to warianty, nie kolory
+        # Czyste 2-cyfrowe numery to warianty, NIE kolory
         if re.match(r"^\d{2}$", suffix):
             return False
-        # RAL format: "59 7021-2" lub litery "ZC"
-        return bool(cls.COLOR_SUFFIX_RE.match(suffix))
+        # RAL format: "59 7021-2" lub "69 W:59..." lub litery "ZC"
+        if re.search(r"\d{2}\s+\d{4}", suffix):
+            return True
+        if re.search(r"\d{2}\s+W:", suffix):
+            return True
+        if re.match(r"^[A-Z]{2,}$", suffix):
+            return True
+        return False
 
     @classmethod
     def _parse_code(cls, code_text: str) -> tuple:
         """
         Parsuje kod Reynaers.
-        
+
         Returns:
             tuple: (base_code, has_color) lub ("", False)
         """
@@ -267,9 +244,9 @@ class ReynaersProfile(VendorProfile):
         if not m:
             return ("", False)
 
-        group = m.group(1)      # "108"
-        article = m.group(2)    # "0081"
-        suffix = m.group(3) or ""  # "59 7021-2" lub ""
+        group = m.group(1)
+        article = m.group(2)
+        suffix = m.group(3) or ""
 
         base_code = f"{group}{article}"
         has_color = cls._is_color_suffix(suffix)
@@ -278,15 +255,6 @@ class ReynaersProfile(VendorProfile):
 
     @classmethod
     def parse_profile_code(cls, code_text: str) -> str:
-        """
-        Parsuje kod profilu Reynaers.
-        
-        Przykłady:
-            "108.0081.59 7021-2"  → "1080081X"
-            "408.0014.59 7021-2"  → "4080014X"
-            "508.0892.59 7021-2"  → "5080892X"
-            "108.1874.17"         → "1081874"
-        """
         base_code, has_color = cls._parse_code(code_text)
         if not base_code:
             return ""
@@ -294,17 +262,6 @@ class ReynaersProfile(VendorProfile):
 
     @classmethod
     def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:
-        """
-        Parsuje kod okucia/akcesorium Reynaers.
-        
-        Przykłady:
-            "061.6634.ZC"         → "0616634X"   (ZC = kolor)
-            "065.6566.59 7021-2"  → "0656566X"   (RAL = kolor)
-            "061.6461.--"         → "0616461"    (-- = bez koloru)
-            "069.6831.04"         → "0696831"    (04 = wariant)
-            "168.5012.--"         → "1685012"    (-- = bez koloru)
-            "168.5000.00"         → "1685000"    (00 = standard)
-        """
         base_code, has_color = cls._parse_code(code_text)
         if not base_code:
             return ""

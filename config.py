@@ -46,8 +46,12 @@ SECTION_RE = re.compile(r"^(Profile|Profile dodatkowe|Akcesoria|Okucia)\b", re.I
 # ZNANE SYSTEMY (dla walidacji)
 # ============================================
 KNOWN_SYSTEMS = [
-    "mb-45", "mb-59s", "mb-60", "mb-70", "mb-77hs", "mb-78ei", 
-    "mb-86", "mb-86n", "mb-86si", "mb-118ei" , "mb-104", "mb-sr50n", "mb-79n",
-    "cs-77", "cs-104", "cp-130", 
-    "masterline-8", "imperial", "smart", "genesis"
+    # Aluprof
+    "mb-45", "mb-59s", "mb-60", "mb-70", "mb-77hs", "mb-78ei",
+    "mb-86", "mb-86n", "mb-86si", "mb-118ei", "mb-104", "mb-sr50n", "mb-79n",
+    # Reynaers
+    "masterline-8", "cs-68", "cs-77", "cs-86", "cs-104",
+    "cp-130", "cp-155", "slimline-38", "hi-finity",
+    # Inne
+    "imperial", "smart", "genesis",
 ]
