@@ -268,37 +268,21 @@ def _find_code_in_neighbors(all_rows, row_idx, parse_fn):
     return ""
 
 
-def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profile):
+def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profile, allowed_codes=None):
     """
-    Parsuje LP_images.html, rozpoznaje kody profili i kopiuje obrazki
-    z nowymi nazwami.
-    
-    Obsługuje dwa scenariusze HTML:
-    - Kod i obrazek w tym samym <tr>
-    - Kod i obrazek w sąsiednich <tr>
-    
     Args:
-        html_path: Ścieżka do LP_images.html
-        images_dir: Folder z obrazkami (LP_images.files)
-        output_dir: Folder docelowy
-        vendor_profile: Klasa dostawcy
-    
-    Returns:
-        int: Liczba skopiowanych plików
+        allowed_codes: set of profile codes to copy. If None, copy all.
     """
     if not os.path.isdir(images_dir):
         raise FileNotFoundError(f"Brak folderu: {images_dir}")
 
     soup = _parse_html(html_path)
-
-    print(f"    DEBUG: Szukam profili w HTML: {html_path}")
-    print(f"    DEBUG: Folder obrazków: {images_dir}")
-    print(f"    DEBUG: Folder wyjściowy: {output_dir}")
-
     os.makedirs(output_dir, exist_ok=True)
+
     basecode_to_all = defaultdict(set)
     renamed = 0
     skipped = 0
+    filtered = 0
 
     all_rows = soup.find_all("tr")
     parse_fn = vendor_profile.parse_profile_code
@@ -315,7 +299,6 @@ def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profi
         old_filename_html = os.path.basename(src)
         existing_filename = find_existing_file(images_dir, old_filename_html)
         if not existing_filename:
-            print(f"    ❌ Nie znaleziono pliku: {old_filename_html}")
             skipped += 1
             continue
 
@@ -328,15 +311,17 @@ def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profi
             idx = tds.index(img_td)
             code_text = _find_code_in_row(tds, idx, parse_fn)
 
-        # Szukaj w sąsiednich wierszach
         base_code = parse_fn(code_text) if code_text else ""
         if not base_code:
             base_code = _find_code_in_neighbors(all_rows, row_idx, parse_fn)
 
         if not base_code:
-            row_text = clean(tr.get_text())[:100]
-            print(f"    ⚠️ Nie sparsowano kodu dla: {old_filename_html} (tekst: '{row_text}')")
             skipped += 1
+            continue
+
+        # FILTR: kopiuj tylko dozwolone kody
+        if allowed_codes is not None and base_code not in allowed_codes:
+            filtered += 1
             continue
 
         print(f"    ✓ Profil: {base_code} → {existing_filename}")
@@ -351,14 +336,8 @@ def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profi
             renamed += 1
         basecode_to_all[base_code].add(new_filename)
 
-    print(f"\n✅ Profile: skopiowano {renamed}, pominięto {skipped}")
+    print(f"\n✅ Profile: skopiowano {renamed}, pominięto {skipped}, odfiltrowano {filtered}")
 
-    # Podsumowanie
-    print(f"\n    📋 Znalezione kody profili:")
-    for code in sorted(basecode_to_all.keys()):
-        print(f"       {code}")
-
-    # Obsługa konfliktów
     if ENABLE_CONFLICT_MODE:
         _handle_conflicts(basecode_to_all, output_dir)
 

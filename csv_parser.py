@@ -307,7 +307,7 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
 
 
 # ============================================
-# PROFILE DODATKOWE
+# PROFILE + PROFILE DODATKOWE
 # ============================================
 
 def extract_additional_profiles_from_csv(csv_path: str, vendor_profile) -> set:
@@ -348,5 +348,44 @@ def extract_additional_profiles_from_csv(csv_path: str, vendor_profile) -> set:
                 code = vendor_profile.parse_profile_code(cell)
                 if code:
                     profiles.add(code)
+
+    return profiles
+
+def get_profile_codes_from_csv(csv_path: str, vendor_profile) -> set:
+    """
+    Wyciąga WSZYSTKIE kody profili z sekcji 'Profile' i 'Profile dodatkowe' w CSV.
+    
+    Returns:
+        set: Kody profili (np. {"1080081X", "4080014X", "1081874"})
+    """
+    rows = _read_csv_rows(csv_path)
+    profiles = set()
+    current_section = None
+
+    for row in rows:
+        r = [clean(c) for c in row]
+        line = ";".join(r)
+
+        # Wykryj sekcję
+        if r and r[0]:
+            first = r[0].strip()
+            if re.match(r"^Profile\s*$", first, re.IGNORECASE):
+                current_section = "profile"
+                continue
+            elif re.match(r"^Profile\s+dodatkowe", first, re.IGNORECASE):
+                current_section = "profile"
+                continue
+            elif re.match(r"^(Uszczelki|Akcesoria|Okucia|Izolacyjność)", first, re.IGNORECASE):
+                current_section = None
+                continue
+
+        if current_section != "profile":
+            continue
+
+        # Parsuj kody profili
+        for cell in r:
+            code = vendor_profile.parse_profile_code(cell)
+            if code:
+                profiles.add(code)
 
     return profiles

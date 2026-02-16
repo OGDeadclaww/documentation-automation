@@ -23,6 +23,7 @@ from csv_parser import (
     extract_color_codes_from_csv,
     parse_hardware_from_csv,
     extract_additional_profiles_from_csv,
+    get_profile_codes_from_csv,
 )
 from html_processor import (
     get_rk_images_from_html,
@@ -144,12 +145,17 @@ def main():
 
     # KROK 2: Profile (osobny folder per system)
     print("\n[KROK 2/4] Przetwarzanie profili...")
+    profile_codes = get_profile_codes_from_csv(csv_file, vendor_profile)
+    print(f"✓ Znaleziono {len(profile_codes)} kodów profili w CSV")
+    print(f"   Kody: {', '.join(sorted(profile_codes))}")
+
     for sys_name in systems_map.keys():
         output_profiles = os.path.join(IMAGES_DB, vendor_key, "profiles", sys_name)
         os.makedirs(output_profiles, exist_ok=True)
         print(f"\n  📁 System: {sys_name} → {output_profiles}")
         rename_profiles_from_lp_html(
-            lp_html, lp_images_dir, output_profiles, vendor_profile
+            lp_html, lp_images_dir, output_profiles, vendor_profile,
+            allowed_codes=profile_codes
         )
 
     # KROK 3: Okucia
