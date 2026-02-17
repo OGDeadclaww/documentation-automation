@@ -2,9 +2,24 @@
 puppeteer:
   path: "{{ pdf_output_path }}"
   format: "A4"
-  margin:
-    top: "2cm"
-    bottom: "2cm"
+---
+
+<style>
+    /* Wymuś drukowanie tła */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    th {
+        background-color: #393c3f !important; /* Twój kolor */
+        color: #ffffff !important;
+        font-weight: bold;
+        text-align: center;
+        padding: 8px;
+    }
+</style>
+
 ---
 
 <img src="{{ logo_path }}" alt="Logo" style="display: block; margin: 0 auto; width: 200px;">

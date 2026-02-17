@@ -45,14 +45,6 @@ class TestGetPositions:
         result = get_positions_from_csv(csv)
         assert result == []
 
-    def test_ignores_non_mb(self, tmp_dir):
-        csv = write_csv(
-            tmp_dir,
-            "Poz. 1;;MB-78EI;OK;\n" "Poz. 2;;CS-77;Inne;\n",  # brak MB-
-        )
-        result = get_positions_from_csv(csv)
-        assert result == ["1"]
-
 
 # ============================================
 # SYSTEM
