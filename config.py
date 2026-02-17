@@ -3,6 +3,7 @@
 Konfiguracja aplikacji rename_images.
 Wszystkie stałe, ścieżki i ustawienia w jednym miejscu.
 """
+
 import os
 import re
 
@@ -40,18 +41,40 @@ AUDIT_LOG = os.path.join(BASE_PATH, "logs", "audit_log.jsonl")
 # REGEX PATTERNS
 # ============================================
 POZ_LINE_RE = re.compile(r"Poz\.\s*(\d+)")
-SECTION_RE = re.compile(r"^(Profile|Profile dodatkowe|Akcesoria|Okucia)\b", re.IGNORECASE)
+SECTION_RE = re.compile(
+    r"^(Profile|Profile dodatkowe|Akcesoria|Okucia)\b", re.IGNORECASE
+)
 
 # ============================================
 # ZNANE SYSTEMY (dla walidacji)
 # ============================================
 KNOWN_SYSTEMS = [
     # Aluprof
-    "mb-45", "mb-59s", "mb-60", "mb-70", "mb-77hs", "mb-78ei",
-    "mb-86", "mb-86n", "mb-86si", "mb-118ei", "mb-104", "mb-sr50n", "mb-79n",
+    "mb-45",
+    "mb-59s",
+    "mb-60",
+    "mb-70",
+    "mb-77hs",
+    "mb-78ei",
+    "mb-86",
+    "mb-86n",
+    "mb-86si",
+    "mb-118ei",
+    "mb-104",
+    "mb-sr50n",
+    "mb-79n",
     # Reynaers
-    "masterline-8", "cs-68", "cs-77", "cs-86", "cs-104",
-    "cp-130", "cp-155", "slimline-38", "hi-finity",
+    "masterline-8",
+    "cs-68",
+    "cs-77",
+    "cs-86",
+    "cs-104",
+    "cp-130",
+    "cp-155",
+    "slimline-38",
+    "hi-finity",
     # Inne
-    "imperial", "smart", "genesis",
+    "imperial",
+    "smart",
+    "genesis",
 ]

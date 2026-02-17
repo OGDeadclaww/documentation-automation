@@ -4,6 +4,7 @@ Klasy dostawców profili (vendor profiles).
 Odpowiadają za parsowanie kodów profili i okuć
 specyficznych dla danego producenta (Aluprof, Reynaers, itp.).
 """
+
 import re
 
 
@@ -16,6 +17,7 @@ def clean(t):
 # KLASA BAZOWA
 # ============================================
 
+
 class VendorProfile:
     """
     Bazowa klasa dostawcy profili.
@@ -23,6 +25,7 @@ class VendorProfile:
       - parse_profile_code()
       - parse_hardware_code()
     """
+
     NAME = "Generic"
     KEY = "generic"
     PROFILE_RE = None
@@ -70,6 +73,7 @@ class VendorProfile:
 # ALUPROF
 # ============================================
 
+
 class AluProfProfile(VendorProfile):
     NAME = "Aluprof"
     KEY = "aluprof"
@@ -81,7 +85,7 @@ class AluProfProfile(VendorProfile):
     # Okucia
     HARDWARE_RE = re.compile(
         r"\b(\d[A-Z0-9]{2,5})\s+(\d+[A-Z]\d+|\d{1,4})\s*([A-Z]\d?|[A-Z]{1,2}\d)?\b",
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     @classmethod
@@ -91,10 +95,7 @@ class AluProfProfile(VendorProfile):
             return ""
 
         # Pattern 1: Kolor WEWNĄTRZ (np. "8A022 27I4")
-        m_embedded = re.search(
-            r"\b(\d[A-Z0-9]{2,5})\s+(\d+)([A-Z]\d*)(\d*)\b",
-            t
-        )
+        m_embedded = re.search(r"\b(\d[A-Z0-9]{2,5})\s+(\d+)([A-Z]\d*)(\d*)\b", t)
         if m_embedded:
             part1 = m_embedded.group(1)
             digits_before = m_embedded.group(2)
@@ -107,8 +108,7 @@ class AluProfProfile(VendorProfile):
 
         # Pattern 2: Standard (np. "8000 965 D")
         m_standard = re.search(
-            r"\b(\d{3,4})\s+(\d{1,4})\s+([A-Z]\d?|[A-Z]{1,2}\d)\b",
-            t
+            r"\b(\d{3,4})\s+(\d{1,4})\s+([A-Z]\d?|[A-Z]{1,2}\d)\b", t
         )
         if m_standard:
             part1 = m_standard.group(1)
@@ -116,10 +116,7 @@ class AluProfProfile(VendorProfile):
             return f"{part1}{part2}X"
 
         # Pattern 3: Bez koloru (np. "8000 4431")
-        m_plain = re.search(
-            r"\b(\d[A-Z0-9]{2,5})\s+(\d{1,4})\b",
-            t
-        )
+        m_plain = re.search(r"\b(\d[A-Z0-9]{2,5})\s+(\d{1,4})\b", t)
         if m_plain:
             part1 = m_plain.group(1)
             part2 = m_plain.group(2)
@@ -130,18 +127,17 @@ class AluProfProfile(VendorProfile):
             return f"{part1}{part2}"
 
         # Pattern 4: Krótki (np. "967 D")
-        m_short = re.search(
-            r"\b(\d{3,6})\s+([A-Z]\d?)\b",
-            t
-        )
+        m_short = re.search(r"\b(\d{3,6})\s+([A-Z]\d?)\b", t)
         if m_short:
             return f"{m_short.group(1)}X"
 
         return ""
 
+
 # ============================================
 # REYNAERS
 # ============================================
+
 
 class ReynaersProfile(VendorProfile):
     NAME = "Reynaers"
@@ -149,10 +145,7 @@ class ReynaersProfile(VendorProfile):
 
     # Regex wyłapujący format: 3cyfry.4cyfry.sufiks
     # Sufiks łapie wszystko do końca, dlatego musimy czyścić input przed użyciem tego regexa.
-    CODE_RE = re.compile(
-        r"\b(\d[A-Z0-9]\d)\.(\d{4})\.(\S+(?:\s+\S+)*)?",
-        re.IGNORECASE
-    )
+    CODE_RE = re.compile(r"\b(\d[A-Z0-9]\d)\.(\d{4})\.(\S+(?:\s+\S+)*)?", re.IGNORECASE)
 
     @classmethod
     def _is_ral_color(cls, suffix: str) -> bool:
@@ -172,7 +165,7 @@ class ReynaersProfile(VendorProfile):
         """
         Parsuje kod Reynaers.
         """
-        t = clean(code_text) # Nie robimy upper() od razu, żeby łatwiej znaleźć "szt"
+        t = clean(code_text)  # Nie robimy upper() od razu, żeby łatwiej znaleźć "szt"
 
         # --- FIX: Usuwanie "śmieci" ilościowych ---
         # Parser CSV skleja komórki, więc dostajemy np. "069.6831.04 5 szt A..B"
@@ -182,9 +175,9 @@ class ReynaersProfile(VendorProfile):
         qty_match = re.search(r"\s+[\d,.]+(?:x[\d,.]+)?\s*szt", t, re.IGNORECASE)
         if qty_match:
             # Ucinamy string w miejscu, gdzie zaczyna się ilość
-            t = t[:qty_match.start()]
+            t = t[: qty_match.start()]
 
-        t = t.upper() # Teraz bezpiecznie zamieniamy na wielkie litery
+        t = t.upper()  # Teraz bezpiecznie zamieniamy na wielkie litery
 
         m = cls.CODE_RE.search(t)
         if not m:
@@ -216,17 +209,17 @@ class ReynaersProfile(VendorProfile):
         code, ok = cls._parse_code(code_text)
         return code if ok else ""
 
+
 # ============================================
 # GENERIC
 # ============================================
+
 
 class GenericProfile(VendorProfile):
     NAME = "Inny / Generic"
     KEY = "generic"
 
-    PROFILE_RE = re.compile(
-        r"\b([A-Z]\d{2})\s*(\d{3,5})\b", re.IGNORECASE
-    )
+    PROFILE_RE = re.compile(r"\b([A-Z]\d{2})\s*(\d{3,5})\b", re.IGNORECASE)
     HARDWARE_RE = re.compile(
         r"\b([0-9A-Z]{3,8})[\s\-/.](\d{1,5}[A-Z]?\d*)\b", re.IGNORECASE
     )
@@ -269,9 +262,7 @@ VENDOR_PROFILES = {
 def get_vendor_by_key(key: str) -> type:
     if key not in VENDOR_PROFILES:
         available = ", ".join(VENDOR_PROFILES.keys())
-        raise KeyError(
-            f"Nieznany dostawca: '{key}'. Dostępni: {available}"
-        )
+        raise KeyError(f"Nieznany dostawca: '{key}'. Dostępni: {available}")
     return VENDOR_PROFILES[key]
 
 

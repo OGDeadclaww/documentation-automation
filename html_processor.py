@@ -3,6 +3,7 @@
 Przetwarzanie plików HTML z obrazkami.
 Parsowanie RK_images.html (rzuty) i LP_images.html (profile, okucia).
 """
+
 import os
 import shutil
 from collections import defaultdict
@@ -12,20 +13,20 @@ from bs4 import BeautifulSoup
 from config import PREFERRED_EXT_ORDER, CONFLICTS_DIR, ENABLE_CONFLICT_MODE
 from vendors import clean
 
-
 # ============================================
 # UTILITY PLIKOWE
 # ============================================
+
 
 def find_existing_file(images_dir: str, filename_from_html: str) -> str:
     """
     Szuka pliku obrazka na dysku, próbując różne rozszerzenia.
     HTML może wskazywać na .jpg, ale plik może być .png.
-    
+
     Args:
         images_dir: Folder z obrazkami
         filename_from_html: Nazwa pliku z HTML (np. "img3.jpg")
-    
+
     Returns:
         str: Rzeczywista nazwa pliku lub None
     """
@@ -41,10 +42,10 @@ def find_existing_file(images_dir: str, filename_from_html: str) -> str:
 def choose_preferred_filename(filenames: list) -> str:
     """
     Wybiera preferowany plik z listy (wg kolejności rozszerzeń).
-    
+
     Args:
         filenames: Lista nazw plików
-    
+
     Returns:
         str: Najlepsza nazwa pliku lub ""
     """
@@ -61,10 +62,10 @@ def choose_preferred_filename(filenames: list) -> str:
 def ensure_conflicts_dir(base_dir: str) -> str:
     """
     Tworzy folder na konflikty (duplikaty).
-    
+
     Args:
         base_dir: Folder bazowy
-    
+
     Returns:
         str: Ścieżka do folderu konfliktów
     """
@@ -77,16 +78,17 @@ def ensure_conflicts_dir(base_dir: str) -> str:
 # PARSOWANIE HTML
 # ============================================
 
+
 def _parse_html(html_path: str) -> BeautifulSoup:
     """
     Wczytuje i parsuje plik HTML.
-    
+
     Args:
         html_path: Ścieżka do pliku HTML
-    
+
     Returns:
         BeautifulSoup: Sparsowany dokument
-    
+
     Raises:
         FileNotFoundError: Gdy brak pliku
     """
@@ -101,13 +103,14 @@ def _parse_html(html_path: str) -> BeautifulSoup:
 # RZUTY (RK_images)
 # ============================================
 
+
 def get_rk_images_from_html(html_path: str) -> list:
     """
     Wyciąga listę nazw obrazków z RK_images.html.
-    
+
     Args:
         html_path: Ścieżka do RK_images.html
-    
+
     Returns:
         list: Lista nazw plików (np. ["img0.jpg", "img1.jpg", ...])
     """
@@ -129,16 +132,16 @@ def get_rk_images_from_html(html_path: str) -> list:
 def rename_views(positions, rk_images, rk_images_dir, prefix, output_dir):
     """
     Kopiuje i zmienia nazwy rzutów pozycji.
-    
+
     Mapowanie: pozycja N → obrazek o indeksie (N-1)*2 w RK_images.
-    
+
     Args:
         positions: Lista numerów pozycji (np. ["1", "2", "5"])
         rk_images: Lista obrazków z RK HTML
         rk_images_dir: Folder źródłowy z obrazkami
         prefix: Prefiks nazwy (np. "Klatka_")
         output_dir: Folder docelowy
-    
+
     Returns:
         int: Liczba skopiowanych plików
     """
@@ -190,15 +193,16 @@ def rename_views(positions, rk_images, rk_images_dir, prefix, output_dir):
 # PROFILE (LP_images)
 # ============================================
 
+
 def _find_code_in_row(tds, img_td_index, parse_fn):
     """
     Szuka kodu w komórkach wiersza (lewo → prawo od obrazka).
-    
+
     Args:
         tds: Lista elementów <td>
         img_td_index: Indeks komórki z obrazkiem
         parse_fn: Funkcja parsująca kod (np. vendor.parse_profile_code)
-    
+
     Returns:
         str: Znaleziony tekst z kodem lub ""
     """
@@ -221,14 +225,14 @@ def _find_code_in_neighbors(all_rows, row_idx, parse_fn):
     """
     Szuka kodu w sąsiednich wierszach (gdy kod i obrazek
     są w osobnych <tr>).
-    
+
     Sprawdza: 1 wiersz wyżej, 1 niżej, 2 wyżej.
-    
+
     Args:
         all_rows: Lista wszystkich <tr>
         row_idx: Indeks bieżącego wiersza
         parse_fn: Funkcja parsująca kod
-    
+
     Returns:
         str: Znaleziony kod lub ""
     """
@@ -268,7 +272,9 @@ def _find_code_in_neighbors(all_rows, row_idx, parse_fn):
     return ""
 
 
-def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profile, allowed_codes=None):
+def rename_profiles_from_lp_html(
+    html_path, images_dir, output_dir, vendor_profile, allowed_codes=None
+):
     """
     Args:
         allowed_codes: set of profile codes to copy. If None, copy all.
@@ -336,7 +342,9 @@ def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profi
             renamed += 1
         basecode_to_all[base_code].add(new_filename)
 
-    print(f"\n✅ Profile: skopiowano {renamed}, pominięto {skipped}, odfiltrowano {filtered}")
+    print(
+        f"\n✅ Profile: skopiowano {renamed}, pominięto {skipped}, odfiltrowano {filtered}"
+    )
 
     if ENABLE_CONFLICT_MODE:
         _handle_conflicts(basecode_to_all, output_dir)
@@ -347,6 +355,7 @@ def rename_profiles_from_lp_html(html_path, images_dir, output_dir, vendor_profi
 # ============================================
 # OKUCIA / AKCESORIA (LP_images)
 # ============================================
+
 
 def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile):
     if not os.path.isdir(images_dir):
@@ -415,19 +424,19 @@ def build_hardware_mapping_from_lp_html(html_path, images_dir, vendor_profile):
     # ═══════════════════════════════════════════════
 
     if not found_any:
-        print(f"\n    ❌ NIE ZNALEZIONO ŻADNYCH OKUĆ W HTML!")
-        print(f"    Sprawdź czy LP_images.html zawiera okucia")
+        print("\n    ❌ NIE ZNALEZIONO ŻADNYCH OKUĆ W HTML!")
+        print("    Sprawdź czy LP_images.html zawiera okucia")
 
     out = {}
     for code_hw, files in tmp.items():
         out[code_hw] = choose_preferred_filename(list(files))
 
     # DEBUG: Pokaż mapowanie
-    print(f"\n    DEBUG HW mapping wynik:")
+    print("\n    DEBUG HW mapping wynik:")
     for code, fn in sorted(out.items()):
         print(f"       {code} → {fn}")
     if not out:
-        print(f"       (pusto)")
+        print("       (pusto)")
 
     return out
 
@@ -473,11 +482,12 @@ def rename_hardware(hardware_codes, code_to_srcfile, srcdir, output_dir):
 # KONFLIKTY
 # ============================================
 
+
 def _handle_conflicts(basecode_to_all, output_dir):
     """
     Przenosi duplikaty do folderu _conflicts/.
     Zostawia preferowany plik, resztę przenosi.
-    
+
     Args:
         basecode_to_all: Mapowanie {kod: {pliki}}
         output_dir: Folder z plikami

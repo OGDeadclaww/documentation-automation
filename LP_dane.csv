@@ -1,0 +1,743 @@
+REYNAL ver: 2026.02 (4927) v1
+;LISTA PRODUKCYJNA NR:;;;;;;;;;;;ZLECENIE:;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;LP 0003/02/2026;;;;;;;;;;;P241031-BMEIA_AUSTRIA-18-12-25;;;;;;;;;;;;;;;;;;;;;;
+;;
+;Utworzono:;;;;;;16.02.2026 08:08:47;;;;Iloœæ pozycji:;;;;;; 6;;Powierzchnia [m2]:;;;;;;;;41,8;;
+;Termin realizacji:;;;;;;23.09.2025  39  tydzieñ roku;;;;Iloœæ konstrukcji:;;;;;; 9;;Obwód [m]:;;;;;;;;78,5;;
+;Klient:;;;;;;;;;;Robocizna [godz]:;;;;;;0,00;;Masa [kg]:;;;;;;;;3 243,2;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;P241031 - Entrance - Poz. 1  MasterLine8 Functional - Okna i witryny (B=1 795, H=2 331)Kolor profili:Lakier SATYNA 59 7021-2 Kolor okuæ:Lakier SATYNA 59 7021-2 Wype³nienia:6/16/9 U=1,0 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;Iloœæ:;;;1;;;;;;
+;;;;;;;;;;;;;;Powierzchnia:;;;;;4,18;;;;;;m2;
+;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;Obwód:;;;;;8,25;;;;;;m;
+;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;Ciê¿ar bez szk³a:;;;;;72,18;;;;;;kg;
+;;;;;;;;;;;;;;Ciê¿ar szk³o:;;;;;95,55;;;;;;kg;
+;;;;;;;;;;;;;;Ciê¿ar razem:;;;;;167,73;;;;;;kg;
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;System:;;;
+;;;;MasterLine8 HI+;;;;;;;;
+;;;;;;;;;;;;Robocizna:;;;;;0,00;;;;;;godz.;;
+;;;;;;;;;;
+;;;
+;;Kolor profili:;;Lakier SATYNA 59 7021-2;;;;;;;;
+;;;;;;;;;;;;Wspó³czynnik U:;;;;;;;;;Brak danych;;;;;;;
+;;;;;;;;;;;;
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;Widok od zewn¹trz;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (1);;;;;;;;;1 (16);;;;;;16.02.2026;;;;;;;;;;;;
+;;;;;;;;;
+B³êdy i ostrze¿enia:;;;;;;;;;
+£¹cznik nie pasuje do profilu ramyZmodyfikowana lista produkcyjna;;;;;;;;
+Informacje z dymków:;;;;;;;;;
+1) drzwi do fasady wejœciowej:  Reynaers Masterline 8 HI+   Lakier : RAL7021 satyna    Okucia:  - 4 x zawias Rollenband (R7021)/skrzyd³o.  - 1-punktowy zamek elektromotoryczny   Dormakaba SVP 2719 DCW panik E   + kabel/przepust/centralka steruj¹ca.  -Beddeleem zapewnia klamkê, ga³kê  i rozety do wk³adki (wk³adka po naszej stronie)  - Bez samozamykacza (Beddeleem bêdzie montowaæ automat.  - Centralna blokada biernego skrzyd³a.  - 2x Kontaktrony Alarmtech  MC270 (oba skrzyda,  NC, grade 3).  ;;;;;;;;;
+Profile;;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie;
+108.0081.59 7021-2;;;;1 szt; 514,0 mm. ;;;A;
+PROFIL DO USZCZELKI;;;;1 szt;1021,0 mm. ;;;B;
+;;;
+108.1874.17;;;;1 szt;1523,0 mm. ;;;3;
+;;;;;;;;;
+PROFIL PROGOWY OTW. NAZEWNATRZ;;;
+408.0014.59 7021-2;;;;2 szt;" 532,0 mm. (45,0';45,0')";;;A;
+;;;;;;;;;
+SKRZYDLO OTW. NA ZEWNATRZ104.5MM;;;;3 szt;"2175,5 mm. (45,0';45,0')";;;A..B;
+;;;;2 szt;"1057,0 mm. (45,0';45,0')";;;B;
+408.0026.59 7021-2;;;;1 szt;"2175,5 mm. (45,0';45,0')";;;A;
+;;;;;;;;;
+SKRZYDLO OTW. DO WEWN104.5MM;;;
+408.1028.59 7021-2;;;;1 szt;"2218,0 mm. (45,0';0,0')";;;1;
+;;;;;;;;;
+PROFIL LACZACY DRZWIOWY;;;;1 szt;"1635,0 mm. (45,0';45,0')";;;2;
+;;;;1 szt;"2218,0 mm. (0,0';45,0')";;;4;
+508.0114.59 7021-2;;;;1 szt;"2298,0 mm. (45,0';0,0')";;;1;
+;;;;;;;;;
+POPRZECZKA HI+ 107MM;;;;1 szt;"1795,0 mm. (45,0';45,0')";;;2;
+;;;;1 szt;"2298,0 mm. (0,0';45,0')";;;4;
+508.0892.59 7021-2;;;;1 szt;1741,0 mm. ;;;3;
+;;;;;;;;;
+PROFIL POSZERZAJACY HI 33MM;;;
+Uszczelki;;;;;;;;;
+;;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie;
+081.9229.07;;;;0,37 m;;;;1+3..4+A..B;
+SZEROKA SZCZOTKA;;;
+087.9882.07;;;;11,88 m;;;;A..B;
+;;;;;;;;;
+WKLADKA IZOLACYJNA26x46.5MM;;;
+Akcesoria;;;;;;;;;
+;;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie;
+069.6831.04;;;;5 szt;;;;A..B;
+MASKOWNICA OTWORUDRENAZOWEGO;;;
+069.8360.04;;;;1,0 szt;;;;1+3..4;
+;;;;;;;;;
+KONCOWKA PROFILUPODLOGOWEGO;;;
+069.8426.04;;;;4 szt;;;;A..B;
+;;;;;;;;;
+UCHWYT SZCZOTKI;;;
+;;;;;;;;;
+
+;;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (1);;;2 (16);;;16.02.2026;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+069.8427.04;;;;4 szt;;;;A..B
+UCHWYT SZCZOTKI;;;
+069.8511.04;;;;1 szt;;;;A
+;;;;;;;;
+ZASLEPKI DRZWI Z-T;;;
+069.8512.04;;;;1 szt;;;;A
+;;;;;;;;
+ZASLEPKI DRZWI Z-T;;;
+168.5000.00;;;;4 szt;;;;A
+;;;;;;;;
+WKRET;;;
+168.5012.--;;;;2,0 szt;;;;A
+;;;;;;;;
+GWOZDZ NAR. ZACISKANY/NAR.SKRECANY/GWOZDZNAR./LACZNIK TEOWY;;;
+168.7073.00;;;;6 szt;;;;A..B
+;;;;;;;;
+LACZNIK NAROZNY;;;
+168.7088.00;;;;2 szt;;;;A
+;;;;;;;;
+NAROZNIK SKRECANY ZOTWOREM;;;
+168.7104.00;;;;2 szt;;;;1..2+4
+;;;;;;;;
+NAROZNIK ZACISKANY 39x19.8MM;;;
+168.8074.00;;;;8 szt;;;;A..B
+;;;;;;;;
+LACZNIK NAROZNY 42.3 x 6.8 MM;;;
+168.8104.00;;;;2 szt;;;;1..2+4
+;;;;;;;;
+NAROZNIK ZACISKANY 39x9.6MM;;;
+169.8748.04;;;;8 szt;;;;A..B
+;;;;;;;;
+PODPORKA POD PRZESZK.;;;
+Okucia;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+061.6461.--;;;;1 szt;;;;A
+PRET M6/1500MM;;;
+061.6462.--;;;;1 szt;;;;A
+;;;;;;;;
+PRET M6/1487MM;;;
+061.6634.ZC;;;;1 szt;;;;A
+;;;;;;;;
+AUTOMATYCZNY ZAMEKWPUSZCZANY;;;
+061.6681.--;;;;1 szt;;;;A
+;;;;;;;;
+ZAMEK/PROWADNICA/OSLONARYGLA;;;
+061.7054.--;;;;1 szt;;;;B
+;;;;;;;;
+WKLADKA 100MM A=35 B=65;;;
+;;;;;;;;
+
+;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (1);;;3 (16);;;16.02.2026;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+061.7713.04;;;;1 szt;;;;B
+ELEMENT PCV GNIAZDA ZAMKA;;;
+061.8154.--;;;;1 szt;;;;B
+;;;;;;;;
+OSLONA RYGLA PODWOJNAPRAWY;;;
+065.6566.59 7021-2;;;;8 szt;;;;A..B
+;;;;;;;;
+ZAWIAS DRZWIOWY ROLLENBAND;;;
+065.6571.--;;;;8 szt;;;;A..B
+;;;;;;;;
+ZESTAW MOCUJACY ROLLENBAND;;;
+;;;;;;;;
+
+;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (1);;;4 (16);;;16.02.2026;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+CF8/9 - Poz. 2) CS77BP - Okna i witryny kuloodporne (B=1 408,H=1 989)Kolor profili:X) Bicolor: W:59 7047-2+Z:59 7021-2 Kolor okuæ:X) Bicolor: W:59 7047-2+Z:59 7021-2 Wype³nienia:6/12/35 U=1,2 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;
+;;;;;;;;;;;;;Iloœæ:;2;;
+;;;;;;;;;;;;;Powierzchnia:;;;2,80;;;;m2;5,60;;m2;
+;;;;;;;;;;;;;
+;;;;;;;;;;;;;Obwód:;;;6,79;;;;m;13,59;;m;
+;;;;;;;;;;;;;
+;;;;;;;;;;;;;Ciê¿ar bez szk³a:;;;48,44;;;;kg;96,89;;kg;
+;;;;;;;;;;;;;Ciê¿ar szk³o:;;;252,85;;;;kg;505,69;;kg;
+;;;;;;;;;;;;;Ciê¿ar razem:;;;301,29;;;;kg;602,58;;kg;
+;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;System:;;;
+;;;CS77BP;;;;;;;;
+;;;;;;;;;;;Robocizna:;;;0,00;;;;godz.;;0,00;;godz.;;;
+;;;;;;;;;
+;;
+;Kolor profili:;;X) Bicolor: W:59 7047-2+Z:59 7021-2;;;;;;;;
+;;;;;;;;;;;Wspó³czynnik U:;;;;;Brak danych;;;;;;;;
+;;;;;;;;;;;
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Widok od zewn¹trz;;;;;;;;;;;;;;;;;;;
+Informacje z dymków:;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+2) okno kuloodporne CF8/9  FB4 + RC3    Lakier - bicolor :   wewn¹trz - RAL 7047 satyna  zewn¹trz - RAL7021 satyna    Do³o¿yæsilikon szklarski  do wklejania szyb;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Profile;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+Kod:;;;;;;Rysunek;;;Iloœæ;;Wymiary;;;;;;;;;;;;;;Po³o¿enie;;;;
+008.3125.69 W:59 7047-2+Z:59 7021-2;;;;;;;;;2x2 szt;;"1989,0 mm. (45,0';45,0')";;;;;;;;;;;;;;1+4;;;;
+OSCIEZNICA 77MM;;;;;;;;;2x2 szt;;"1408,0 mm. (45,0';45,0')";;;;;;;;;;;;;;2..3;;;;
+;;;;;;;;
+008.3804.59 7021-2;;;;;;;;;2x2 szt;;"1989,0 mm. (45,0';45,0')";;;;;;;;;;;;;;1+4;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PROFIL KULOODPORNY;;;;;;;;;2x2 szt;;"1408,0 mm. (45,0';45,0')";;;;;;;;;;;;;;2..3;;;;
+;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (2);;;;;;;;5 (16);;;;;;;16.02.2026;;;;;;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+0S0.2703.--;;;;2x2 szt;1890,0 mm. ;;;1+4
+PROFIL STALOWY 27x3MM;;;;2x2 szt;1315,0 mm. ;;;2..3
+;;;
+Profile dodatkowe;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+0S0.7106.--;;;;2x2 szt;1983,0 mm. ;;;1+4
+PROFIL STALOWY 71x6MM;;;;2x2 szt;1258,0 mm. ;;;2..3
+;;;
+Akcesoria;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+060.8723.--;;;;4x2 szt;;;;1..4
+KATOWY NAROZNIK;;;
+060.8724.00;;;;8x2 szt;;;;1..4
+;;;;;;;;
+KATOWY NAROZNIK;;;
+068.7854.00;;;;4x2 szt;;;;1..4
+;;;;;;;;
+LACZNIK NAROZNY 38.95x17.4MM;;;
+068.7855.00;;;;4x2 szt;;;;1..4
+;;;;;;;;
+LACZNIK NAROZNY 31x10.45MM;;;
+069.6552.--;;;;2x2 szt;;;;A
+;;;;;;;;
+PODPORKA POD PRZESZKLENIEINOX;;;
+;;;;;;;;
+
+;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (2);;;6 (16);;;16.02.2026;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+CF1/2/3 - Poz. 3) CS77BP - Okna i witryny kuloodporne (B=1 408,H=1 979)Kolor profili:X) Bicolor: W:59 7047-2+Z:59 7021-2 Kolor okuæ:X) Bicolor: W:59 7047-2+Z:59 7021-2 Wype³nienia:6/12/35 U=1,2 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;
+;;;;;;;;;;;;;Iloœæ:;3;;
+;;;;;;;;;;;;;Powierzchnia:;;;2,79;;;;m2;8,36;;m2;
+;;;;;;;;;;;;;
+;;;;;;;;;;;;;Obwód:;;;6,77;;;;m;20,32;;m;
+;;;;;;;;;;;;;
+;;;;;;;;;;;;;Ciê¿ar bez szk³a:;;;48,30;;;;kg;144,90;;kg;
+;;;;;;;;;;;;;Ciê¿ar szk³o:;;;251,50;;;;kg;754,49;;kg;
+;;;;;;;;;;;;;Ciê¿ar razem:;;;299,79;;;;kg;899,38;;kg;
+;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;System:;;;
+;;;CS77BP;;;;;;;;
+;;;;;;;;;;;Robocizna:;;;0,00;;;;godz.;;;;godz.;;;
+;;;;;;;;;
+;;
+;Kolor profili:;;X) Bicolor: W:59 7047-2+Z:59 7021-2;;;;;;;;
+;;;;;;;;;;;Wspó³czynnik U:;;;;;Brak danych;;;;;;;;
+;;;;;;;;;;;
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Widok od zewn¹trz;;;;;;;;;;;;;;;;;;;
+Informacje z dymków:;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+3) okno kuloodporne CF1/2/3  FB4 + RC3    Lakier - bicolor :   wewn¹trz - RAL 7047 satyna  zewn¹trz - RAL7021 satyna    Do³o¿yæsilikon szklarski  do wklejania szyb;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Profile;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+Kod:;;;;;;Rysunek;;;Iloœæ;;Wymiary;;;;;;;;;;;;;;Po³o¿enie;;;;
+008.3125.69 W:59 7047-2+Z:59 7021-2;;;;;;;;;2x3 szt;;"1979,0 mm. (45,0';45,0')";;;;;;;;;;;;;;1+4;;;;
+OSCIEZNICA 77MM;;;;;;;;;2x3 szt;;"1408,0 mm. (45,0';45,0')";;;;;;;;;;;;;;2..3;;;;
+;;;;;;;;
+008.3804.59 7021-2;;;;;;;;;2x3 szt;;"1979,0 mm. (45,0';45,0')";;;;;;;;;;;;;;1+4;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+PROFIL KULOODPORNY;;;;;;;;;2x3 szt;;"1408,0 mm. (45,0';45,0')";;;;;;;;;;;;;;2..3;;;;
+;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (3);;;;;;;;7 (16);;;;;;;16.02.2026;;;;;;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+0S0.2703.--;;;;2x3 szt;1880,0 mm. ;;;1+4
+PROFIL STALOWY 27x3MM;;;;2x3 szt;1315,0 mm. ;;;2..3
+;;;
+Profile dodatkowe;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+0S0.7106.--;;;;2x3 szt;1973,0 mm. ;;;1+4
+PROFIL STALOWY 71x6MM;;;;2x3 szt;1258,0 mm. ;;;2..3
+;;;
+Akcesoria;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+060.8723.--;;;;4x3 szt;;;;1..4
+KATOWY NAROZNIK;;;
+060.8724.00;;;;8x3 szt;;;;1..4
+;;;;;;;;
+KATOWY NAROZNIK;;;
+068.7854.00;;;;4x3 szt;;;;1..4
+;;;;;;;;
+LACZNIK NAROZNY 38.95x17.4MM;;;
+068.7855.00;;;;4x3 szt;;;;1..4
+;;;;;;;;
+LACZNIK NAROZNY 31x10.45MM;;;
+069.6552.--;;;;2x3 szt;;;;A
+;;;;;;;;
+PODPORKA POD PRZESZKLENIEINOX;;;
+;;;;;;;;
+
+;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (3);;;8 (16);;;16.02.2026;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+CF4+5+6+7 - Poz. 4) CS77BP - Okna i witryny kuloodporne (B=4 602,H=1 987)Kolor profili:X) Bicolor: W:59 7047-2+Z:59 7021-2 Kolor okuæ:X) Bicolor: W:59 7047-2+Z:59 7021-2 Wype³nienia:6/12/35 U=1,2 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;
+;;;;;;;;;;;;;Iloœæ:;1;;;;
+;;;;;;;;;;;;;Powierzchnia:;;;9,14;;;;m2;
+;;;;;;;;;;;;;
+;;;;;;;;;;;;;Obwód:;;;13,18;;;;m;
+;;;;;;;;;;;;;
+;;;;;;;;;;;;;Ciê¿ar bez szk³a:;;;149,93;;;;kg;
+;;;;;;;;;;;;;Ciê¿ar szk³o:;;;839,44;;;;kg;
+;;;;;;;;;;;;;Ciê¿ar razem:;;;989,37;;;;kg;
+;;;;;;;;;;;;;;;;;;;;;
+;;
+;System:;;;
+;;;CS77BP;;;;;;;;
+;;;;;;;;;;;Robocizna:;;;0,00;;;;godz.;;
+;;;;;;;;;
+;;
+;Kolor profili:;;X) Bicolor: W:59 7047-2+Z:59 7021-2;;;;;;;;
+;;;;;;;;;;;Wspó³czynnik U:;;;;;Brak danych;;;;;;
+;;;;;;;;;;;
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;Widok od zewn¹trz;;;;;;;;;;;;;;;;;
+Informacje z dymków:;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+4) okno kuloodporne CF4+5+6+7  FB4 + RC3    Lakier - bicolor :   wewn¹trz - RAL 7047 satyna  zewn¹trz - RAL7021 satyna   Do³o¿yæ silikon szklarski  do wklejania szyb;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Profile;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+Kod:;;;;;;Rysunek;;;Iloœæ;;Wymiary;;;;;;;;;;;;;;Po³o¿enie;;
+008.3114.69 W:59 7047-2+Z:59 7021-2;;;;;;;;;3 szt;;1883,0 mm. ;;;;;;;;;;;;;;4..6;;
+POPRZECZKA 102MM;;;;;;;;
+008.3125.69 W:59 7047-2+Z:59 7021-2;;;;;;;;;2 szt;;"1987,0 mm. (45,0';45,0')";;;;;;;;;;;;;;1+7;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+OSCIEZNICA 77MM;;;;;;;;;2 szt;;"4602,0 mm. (45,0';45,0')";;;;;;;;;;;;;;2..3;;
+;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (4);;;;;;;;9 (16);;;;;;;16.02.2026;;;;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+008.3804.59 7021-2;;;;2 szt;"1987,0 mm. (45,0';45,0')";;;1+7
+PROFIL KULOODPORNY;;;;2 szt;"4602,0 mm. (45,0';45,0')";;;2..3
+;;;
+008.3805.59 7021-2;;;;3 szt;1833,0 mm. ;;;4..6
+;;;;;;;;
+PROFIL KULOODPORNY;;;
+0S0.2703.--;;;;8 szt;1888,0 mm. ;;;1+4..7
+;;;;;;;;
+PROFIL STALOWY 27x3MM;;;;4 szt; 885,0 mm. ;;;2..3
+;;;;4 szt;1308,0 mm. ;;;2..3
+Profile dodatkowe;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+0S0.7106.--;;;;2 szt;1981,0 mm. ;;;1+7
+PROFIL STALOWY 71x6MM;;;;2 szt;4452,0 mm. ;;;2..3
+;;;
+0S0.9606.--;;;;3 szt;1833,0 mm. ;;;4..6
+;;;;;;;;
+PROFIL STALOWY 96x6MM;;;
+Akcesoria;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+060.8723.--;;;;4 szt;;;;1..3+7
+KATOWY NAROZNIK;;;
+060.8724.00;;;;8 szt;;;;1..3+7
+;;;;;;;;
+KATOWY NAROZNIK;;;
+068.7854.00;;;;4 szt;;;;1..3+7
+;;;;;;;;
+LACZNIK NAROZNY 38.95x17.4MM;;;
+068.7855.00;;;;4 szt;;;;1..3+7
+;;;;;;;;
+LACZNIK NAROZNY 31x10.45MM;;;
+068.8732.00;;;;6 szt;;;;2..6
+;;;;;;;;
+LACZNIK TEOWY 30.9x38.8MM;;;
+069.6552.--;;;;8 szt;;;;A..D
+;;;;;;;;
+PODPORKA POD PRZESZKLENIEINOX;;;
+;;;;;;;;
+
+;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (4);;;10 (16);;;16.02.2026;;
+;;;;;;;;;;;;;;;;;;;;;;;;
+L00 terrace door - Poz. 5) MasterLine8 Functional - Okna i witryny (B=4 081, H=2 413)Kolor profili:Lakier SATYNA 59 7047-2 Kolor okuæ:Lakier SATYNA 59 7047-2 Wype³nienia:6/16/9 U=1,0 ;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;
+;;;;;;;;;;Iloœæ:;1;;;;
+;;;;;;;;;;Powierzchnia:;;;8,33;;;;m2;
+;;;;;;;;;;
+;;;;;;;;;;Obwód:;;;12,99;;;;m;
+;;;;;;;;;;
+;;;;;;;;;;Ciê¿ar bez szk³a:;;;74,99;;;;kg;
+;;;;;;;;;;Ciê¿ar szk³o:;;;257,11;;;;kg;
+;;;;;;;;;;Ciê¿ar razem:;;;332,10;;;;kg;
+;;;;;;;;;;;;;;;;;;
+;;
+;System:;;;
+;;;MasterLine8 HI+;;;;;
+;;;;;;;;Robocizna:;;;0,00;;;;godz.;;
+;;;;;;
+;;
+;Kolor profili:;;Lakier SATYNA 59 7047-2;;;;;
+;;;;;;;;Wspó³czynnik U:;;;;;Brak danych;;;;;
+;;;;;;;;
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;;;;;;;;;;;;;;;;;;;;;
+;Widok od zewn¹trz;;;;;;;;;;;;;;;
+B³êdy i ostrze¿enia:;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;
+£¹cznik nie pasuje do profilu ramyZmodyfikowana lista produkcyjna;;;;;;;;;;;;;;;;;;;;;;;
+Informacje z dymków:;;;;;;;;;;;;;;;;;;;;;;;;
+5) L00 Drzwi na taras:    Reynaers Masterline 8 HI+   Lakier : RAL7047 satyna    Okucia:  - 1 x zawias Rollenband (R7047)/skrzyd³o.  - 1-punktowy zamek - Fuhr 803.  - Beddeleem zapewnia klamki i rozety do  wk³adki (wk³adka po naszej stronie)  -Samozamykacz: GEZE TS5000 (srebrny,   strona zawiasowa, z ogranicznikiem otwarcia).  - 1x Kontaktron Alarmtech  MC270 (NC,grade 3)  ;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (5);;;;;;;11 (16);;;;;16.02.2026;;;;;;;;;;;
+;;;;;;;;
+Profile;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+108.0081.59 7047-2;;;;1 szt; 976,0 mm. ;;;A
+PROFIL DO USZCZELKI;;;
+108.1874.17;;;;1 szt; 966,0 mm. ;;;6
+;;;;;;;;
+PROFIL PROGOWY OTW. NAZEWNATRZ;;;
+408.0014.59 7047-2;;;;2 szt;"1012,0 mm. (45,0';45,0')";;;A
+;;;;;;;;
+SKRZYDLO OTW. NA ZEWNATRZ104.5MM;;;;2 szt;"2284,5 mm. (45,0';45,0')";;;A
+;;;
+408.1028.59 7047-2;;;;1 szt;"2327,0 mm. (45,0';0,0')";;;4
+;;;;;;;;
+PROFIL LACZACY DRZWIOWY;;;;1 szt;"1078,0 mm. (45,0';45,0')";;;5
+;;;;1 szt;"2327,0 mm. (0,0';45,0')";;;7
+508.0120.59 7047-2;;;;2 szt;2380,0 mm. ;;;4+7
+;;;;;;;;
+POPRZECZKA HI+ 87MM;;;
+508.0125.59 7047-2;;;;2 szt;"1890,0 mm. (45,0';45,0')";;;1+10
+;;;;;;;;
+OSCIEZNICA HI 80MM;;;;2 szt;"1468,5 mm. (0,0';45,0')";;;2+9
+;;;;2 szt;"1468,5 mm. (45,0';0,0')";;;3+8
+;;;;1 szt;1078,0 mm. ;;;5
+508.0892.59 7021-2;;;;1 szt;1198,0 mm. ;;;6
+;;;;;;;;
+PROFIL POSZERZAJACY HI 33MM;;;
+Uszczelki;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+081.9229.07;;;;0,24 m;;;;4+6..7+A
+SZEROKA SZCZOTKA;;;
+087.9882.07;;;;6,59 m;;;;A
+;;;;;;;;
+WKLADKA IZOLACYJNA26x46.5MM;;;
+Akcesoria;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+069.6831.04;;;;9 szt;;;;3+9+A
+MASKOWNICA OTWORUDRENAZOWEGO;;;
+069.8360.04;;;;1,0 szt;;;;4+6..7
+;;;;;;;;
+KONCOWKA PROFILUPODLOGOWEGO;;;
+069.8426.04;;;;2 szt;;;;A
+;;;;;;;;
+UCHWYT SZCZOTKI;;;
+069.8427.04;;;;2 szt;;;;A
+;;;;;;;;
+UCHWYT SZCZOTKI;;;
+160.8750.--;;;;6 szt;;;;2..5+7..9
+;;;;;;;;
+LACZNIK TEOWY / LACZNIKNAROZNY;;;
+168.5000.00;;;;12 szt;;;;2..5+7..9
+;;;;;;;;
+WKRET;;;
+;;;;;;;;
+
+;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (5);;;12 (16);;;16.02.2026;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+168.7004.00;;;;4 szt;;;;1..3+8..10
+LACZNIK NAROZNY;;;
+168.7073.00;;;;4 szt;;;;A
+;;;;;;;;
+LACZNIK NAROZNY;;;
+168.8004.00;;;;4 szt;;;;1..3+8..10
+;;;;;;;;
+LACZNIK NAROZNY;;;
+168.8074.00;;;;4 szt;;;;A
+;;;;;;;;
+LACZNIK NAROZNY 42.3 x 6.8 MM;;;
+168.8688.04;;;;12 szt;;;;2..5+7..9
+;;;;;;;;
+ELEMENT USZCZELNIAJACYZLACZA TEOWEGO;;;
+168.8714.00;;;;6 szt;;;;2..5+7..9
+;;;;;;;;
+LACZNIK TEOWY 39x19.8MM;;;
+169.8748.04;;;;12 szt;;;;A..C
+;;;;;;;;
+PODPORKA POD PRZESZK.;;;
+Okucia;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+061.7054.--;;;;1 szt;;;;A
+WKLADKA 100MM A=35 B=65;;;
+061.7713.04;;;;1 szt;;;;A
+;;;;;;;;
+ELEMENT PCV GNIAZDA ZAMKA;;;
+061.8153.--;;;;1 szt;;;;A
+;;;;;;;;
+OSLONA RYGLA PODWOJNA LEWY;;;
+061.8527.ZC;;;;1 szt;;;;A
+;;;;;;;;
+ZAMEK 1-PUNKTOWY;;;
+065.6566.59 7047-2;;;;4 szt;;;;A
+;;;;;;;;
+ZAWIAS DRZWIOWY ROLLENBAND;;;
+065.6571.--;;;;4 szt;;;;A
+;;;;;;;;
+ZESTAW MOCUJACY ROLLENBAND;;;
+065.7443.14;;;;1 szt;;;;A
+;;;;;;;;
+SAMOZAMYKACZ;;;
+065.7452.14;;;;1 szt;;;;A
+;;;;;;;;
+RAMIE, SZYNA SAMOZAMYKACZA;;;
+065.7582.14;;;;1 szt;;;;A
+;;;;;;;;
+PLYTA MONTAZOWASAMOZAMYKACZ;;;
+;;;;;;;;
+
+;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (5);;;13 (16);;;16.02.2026;;
+;;;;;;;;;;;;;;;;;;;;;;;;
+L07 terrace door - Poz. 6) MasterLine8 Functional - Okna i witryny (B=2 731, H=2 283)Kolor profili:X) Bicolor: W:59 7047-2+Z:59 7021-2 Kolor okuæ:X) Bicolor: W:59 7047-2+Z:59 7021-2 Wype³nienia:6/16/9 U=1,0 ;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;
+;;;;;;;;;;Iloœæ:;1;;;;
+;;;;;;;;;;Powierzchnia:;;;6,23;;;;m2;
+;;;;;;;;;;
+;;;;;;;;;;Obwód:;;;10,16;;;;m;
+;;;;;;;;;;
+;;;;;;;;;;Ciê¿ar bez szk³a:;;;70,43;;;;kg;
+;;;;;;;;;;Ciê¿ar szk³o:;;;181,64;;;;kg;
+;;;;;;;;;;Ciê¿ar razem:;;;252,07;;;;kg;
+;;;;;;;;;;;;;;;;;;
+;;
+;System:;;;
+;;;MasterLine8 HI+;;;;;
+;;;;;;;;Robocizna:;;;0,00;;;;godz.;;
+;;;;;;
+;;
+;Kolor profili:;;X) Bicolor: W:59 7047-2+Z:59 7021-2;;;;;
+;;;;;;;;Wspó³czynnik U:;;;;;Brak danych;;;;;
+;;;;;;;;
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;;;;;;;;;;;;;;;;;;;;;
+;Widok od zewn¹trz;;;;;;;;;;;;;;;
+B³êdy i ostrze¿enia:;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;
+£¹cznik nie pasuje do profilu ramyZmodyfikowana lista produkcyjna;;;;;;;;;;;;;;;;;;;;;;;
+Informacje z dymków:;;;;;;;;;;;;;;;;;;;;;;;;
+6) L07 Drzwi na taras:    Reynaers Masterline 8 HI+   Lakier - bicolor :   wewn¹trz - RAL 7047 satyna  zewn¹trz - RAL7021 satyna   Okucia:  - 1 x zawias Rollenband (R7021)/ skrzyd³o.  - 1-punktowy zamek - Fuhr 803.  - Beddeleem zapewnia klamki i rozety do wk³adki (wk³adka po naszej stronie)  - Samozamykacz: GEZE TS5000 (srebrny,   strona zawiasowa, z ogranicznikiem otwarcia).  - 1xKontaktron Alarmtech  MC270 (NC, grade 3);;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (6);;;;;;;14 (16);;;;;16.02.2026;;;;;;;;;;;
+;;;;;;;;
+Profile;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+108.0081.59 7047-2;;;;1 szt; 976,0 mm. ;;;B
+PROFIL DO USZCZELKI;;;
+108.1874.17;;;;1 szt; 966,0 mm. ;;;6
+;;;;;;;;
+PROFIL PROGOWY OTW. NAZEWNATRZ;;;
+408.0014.69 W:59 7047-2+Z:59 7021-2;;;;2 szt;"1012,0 mm. (45,0';45,0')";;;B
+;;;;;;;;
+SKRZYDLO OTW. NA ZEWNATRZ104.5MM;;;;2 szt;"2154,5 mm. (45,0';45,0')";;;B
+;;;
+408.1028.69 W:59 7047-2+Z:59 7021-2;;;;1 szt;"2197,0 mm. (45,0';0,0')";;;4
+;;;;;;;;
+PROFIL LACZACY DRZWIOWY;;;;1 szt;"1078,0 mm. (45,0';45,0')";;;5
+;;;;1 szt;"2197,0 mm. (0,0';45,0')";;;7
+508.0120.69 W:59 7047-2+Z:59 7021-2;;;;2 szt;2250,0 mm. ;;;4+7
+;;;;;;;;
+POPRZECZKA HI+ 87MM;;;
+508.0125.69 W:59 7047-2+Z:59 7021-2;;;;2 szt;"2250,0 mm. (45,0';45,0')";;;1+10
+;;;;;;;;
+OSCIEZNICA HI 80MM;;;;2 szt;" 793,5 mm. (0,0';45,0')";;;2+9
+;;;;2 szt;" 793,5 mm. (45,0';0,0')";;;3+8
+;;;;1 szt;1078,0 mm. ;;;5
+508.0892.59 7021-2;;;;2 szt; 766,5 mm. ;;;3
+;;;;;;;;
+PROFIL POSZERZAJACY HI 33MM;;;;1 szt;1198,0 mm. ;;;6
+;;;
+Uszczelki;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+081.9229.07;;;;0,24 m;;;;4+6..7+B
+SZEROKA SZCZOTKA;;;
+087.9882.07;;;;6,33 m;;;;B
+;;;;;;;;
+WKLADKA IZOLACYJNA26x46.5MM;;;
+Akcesoria;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+069.6831.04;;;;7 szt;;;;3+9+B
+MASKOWNICA OTWORUDRENAZOWEGO;;;
+069.8360.04;;;;1,0 szt;;;;4+6..7
+;;;;;;;;
+KONCOWKA PROFILUPODLOGOWEGO;;;
+069.8426.04;;;;2 szt;;;;B
+;;;;;;;;
+UCHWYT SZCZOTKI;;;
+069.8427.04;;;;2 szt;;;;B
+;;;;;;;;
+UCHWYT SZCZOTKI;;;
+160.8750.--;;;;6 szt;;;;2..5+7..9
+;;;;;;;;
+LACZNIK TEOWY / LACZNIKNAROZNY;;;
+168.5000.00;;;;12 szt;;;;2..5+7..9
+;;;;;;;;
+WKRET;;;
+;;;;;;;;
+
+;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (6);;;15 (16);;;16.02.2026;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+168.7004.00;;;;4 szt;;;;1..3+8..10
+LACZNIK NAROZNY;;;
+168.7073.00;;;;4 szt;;;;B
+;;;;;;;;
+LACZNIK NAROZNY;;;
+168.8004.00;;;;4 szt;;;;1..3+8..10
+;;;;;;;;
+LACZNIK NAROZNY;;;
+168.8074.00;;;;4 szt;;;;B
+;;;;;;;;
+LACZNIK NAROZNY 42.3 x 6.8 MM;;;
+168.8688.04;;;;12 szt;;;;2..5+7..9
+;;;;;;;;
+ELEMENT USZCZELNIAJACYZLACZA TEOWEGO;;;
+168.8714.00;;;;6 szt;;;;2..5+7..9
+;;;;;;;;
+LACZNIK TEOWY 39x19.8MM;;;
+169.8748.04;;;;12 szt;;;;A..C
+;;;;;;;;
+PODPORKA POD PRZESZK.;;;
+Okucia;;;;;;;;
+;;;;;;;;
+
+Kod:;Rysunek;;;Iloœæ;Wymiary;;;Po³o¿enie
+061.7054.--;;;;1 szt;;;;B
+WKLADKA 100MM A=35 B=65;;;
+061.7713.04;;;;1 szt;;;;B
+;;;;;;;;
+ELEMENT PCV GNIAZDA ZAMKA;;;
+061.8153.--;;;;1 szt;;;;B
+;;;;;;;;
+OSLONA RYGLA PODWOJNA LEWY;;;
+061.8527.ZC;;;;1 szt;;;;B
+;;;;;;;;
+ZAMEK 1-PUNKTOWY;;;
+065.6566.59 7021-2;;;;3 szt;;;;B
+;;;;;;;;
+ZAWIAS DRZWIOWY ROLLENBAND;;;
+065.6571.--;;;;3 szt;;;;B
+;;;;;;;;
+ZESTAW MOCUJACY ROLLENBAND;;;
+065.7443.14;;;;1 szt;;;;B
+;;;;;;;;
+SAMOZAMYKACZ;;;
+065.7452.14;;;;1 szt;;;;B
+;;;;;;;;
+RAMIE, SZYNA SAMOZAMYKACZA;;;
+065.7582.14;;;;1 szt;;;;B
+;;;;;;;;
+PLYTA MONTAZOWASAMOZAMYKACZ;;;
+;;;;;;;;
+
+Proszê sprawdziæ wszystkie rezultaty pod wzglêdem iloœciowym, jakoœciowym i konstrukcyjno-wytrzyma³oœciowym. Dane pismo jest niezobowi¹zuj¹ce. ;;;;;;;;
+
+;;;;;;;;
+
+P241031-BMEIA_AUSTRIA-18-12-25 (6);;;16 (16);;;16.02.2026;;

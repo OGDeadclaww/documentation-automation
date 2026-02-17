@@ -1,6 +1,6 @@
 # Documentation Automation System
 
-Enterprise-grade automation system for generating technical documentation 
+Enterprise-grade automation system for generating technical documentation
 for aluminum construction projects (doors, windows, facades).
 
 ## Features

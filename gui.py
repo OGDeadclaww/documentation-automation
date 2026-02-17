@@ -3,24 +3,25 @@
 Dialogi i okna GUI (tkinter).
 Wybór plików, projektów, dostawców, systemów.
 """
+
 import os
 import re
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox
 from difflib import get_close_matches
 
-from config import PREFERRED_EXT_ORDER, MAX_PREFIX_LENGTH, KNOWN_SYSTEMS
+from config import MAX_PREFIX_LENGTH, KNOWN_SYSTEMS
 from vendors import VENDOR_PROFILES, list_vendors
-
 
 # ============================================
 # WYBÓR DOSTAWCY
 # ============================================
 
+
 def select_vendor():
     """
     Wyświetla okno wyboru dostawcy profili.
-    
+
     Returns:
         Klasa VendorProfile lub None jeśli anulowano
     """
@@ -36,7 +37,7 @@ def select_vendor():
     tk.Label(
         choice_window,
         text="Wybierz dostawcę systemu profili:",
-        font=("Arial", 12, "bold")
+        font=("Arial", 12, "bold"),
     ).pack(pady=10)
 
     selected_vendor = tk.StringVar(value=vendors[0][0])
@@ -47,7 +48,7 @@ def select_vendor():
             text=name,
             variable=selected_vendor,
             value=key,
-            font=("Arial", 10)
+            font=("Arial", 10),
         ).pack(anchor="w", padx=20, pady=5)
 
     result = {"vendor": None}
@@ -60,13 +61,23 @@ def select_vendor():
         choice_window.destroy()
 
     tk.Button(
-        choice_window, text="Potwierdź", command=on_confirm,
-        font=("Arial", 10), bg="#4CAF50", fg="white", width=15
+        choice_window,
+        text="Potwierdź",
+        command=on_confirm,
+        font=("Arial", 10),
+        bg="#4CAF50",
+        fg="white",
+        width=15,
     ).pack(side="left", padx=20, pady=20)
 
     tk.Button(
-        choice_window, text="Anuluj", command=on_cancel,
-        font=("Arial", 10), bg="#f44336", fg="white", width=15
+        choice_window,
+        text="Anuluj",
+        command=on_cancel,
+        font=("Arial", 10),
+        bg="#f44336",
+        fg="white",
+        width=15,
     ).pack(side="right", padx=20, pady=20)
 
     choice_window.wait_window()
@@ -83,14 +94,15 @@ def select_vendor():
 # WYBÓR PLIKÓW I FOLDERÓW
 # ============================================
 
+
 def select_file(file_type: str, title: str) -> str:
     """
     Otwiera dialog wyboru pliku.
-    
+
     Args:
         file_type: Typ pliku ("MET", "CSV", "HTML", "ALL")
         title: Tytuł okna dialogowego
-    
+
     Returns:
         str: Ścieżka do pliku lub None jeśli anulowano
     """
@@ -98,15 +110,19 @@ def select_file(file_type: str, title: str) -> str:
     root.withdraw()
 
     filetypes = {
-        "MET":  [("Project files", "*.MET;*.REY"), ("MET files", "*.MET"), ("REY files", "*.REY"), ("All files", "*.*")],
-        "CSV":  [("CSV files", "*.csv"), ("All files", "*.*")],
+        "MET": [
+            ("Project files", "*.MET;*.REY"),
+            ("MET files", "*.MET"),
+            ("REY files", "*.REY"),
+            ("All files", "*.*"),
+        ],
+        "CSV": [("CSV files", "*.csv"), ("All files", "*.*")],
         "HTML": [("HTML files", "*.html"), ("All files", "*.*")],
-        "ALL":  [("All files", "*.*")],
+        "ALL": [("All files", "*.*")],
     }
 
     file_path = filedialog.askopenfilename(
-        title=title,
-        filetypes=filetypes.get(file_type, filetypes["ALL"])
+        title=title, filetypes=filetypes.get(file_type, filetypes["ALL"])
     )
     return file_path if file_path else None
 
@@ -114,10 +130,10 @@ def select_file(file_type: str, title: str) -> str:
 def select_folder(title: str) -> str:
     """
     Otwiera dialog wyboru folderu.
-    
+
     Args:
         title: Tytuł okna dialogowego
-    
+
     Returns:
         str: Ścieżka do folderu lub None jeśli anulowano
     """
@@ -131,14 +147,15 @@ def select_folder(title: str) -> str:
 # WYBÓR PROJEKTU
 # ============================================
 
+
 def select_project_from_list(projects_folder: str) -> str:
     """
     Wyświetla listę projektów do wyboru.
     Projekty to foldery zaczynające się od "20" (rok).
-    
+
     Args:
         projects_folder: Ścieżka do folderu z projektami
-    
+
     Returns:
         str: Nazwa wybranego projektu lub None
     """
@@ -146,10 +163,14 @@ def select_project_from_list(projects_folder: str) -> str:
         messagebox.showerror("Błąd", f"Brak folderu: {projects_folder}")
         return None
 
-    projects = sorted([
-        d for d in os.listdir(projects_folder)
-        if os.path.isdir(os.path.join(projects_folder, d)) and d.startswith("20")
-    ], reverse=True)
+    projects = sorted(
+        [
+            d
+            for d in os.listdir(projects_folder)
+            if os.path.isdir(os.path.join(projects_folder, d)) and d.startswith("20")
+        ],
+        reverse=True,
+    )
 
     if not projects:
         messagebox.showerror("Błąd", "Brak projektów w folderze")
@@ -165,7 +186,7 @@ def select_project_from_list(projects_folder: str) -> str:
     tk.Label(
         choice_window,
         text=f"Znaleziono {len(projects)} projektów:",
-        font=("Arial", 12, "bold")
+        font=("Arial", 12, "bold"),
     ).pack(pady=10)
 
     # Lista z scrollbarem
@@ -176,10 +197,7 @@ def select_project_from_list(projects_folder: str) -> str:
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
     listbox = tk.Listbox(
-        frame,
-        yscrollcommand=scrollbar.set,
-        font=("Courier", 10),
-        height=15
+        frame, yscrollcommand=scrollbar.set, font=("Courier", 10), height=15
     )
     listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar.config(command=listbox.yview)
@@ -207,13 +225,23 @@ def select_project_from_list(projects_folder: str) -> str:
     btn_frame.pack(pady=10)
 
     tk.Button(
-        btn_frame, text="Wybierz", command=on_select,
-        font=("Arial", 10), bg="#4CAF50", fg="white", width=15
+        btn_frame,
+        text="Wybierz",
+        command=on_select,
+        font=("Arial", 10),
+        bg="#4CAF50",
+        fg="white",
+        width=15,
     ).pack(side="left", padx=10)
 
     tk.Button(
-        btn_frame, text="Anuluj", command=on_cancel,
-        font=("Arial", 10), bg="#f44336", fg="white", width=15
+        btn_frame,
+        text="Anuluj",
+        command=on_cancel,
+        font=("Arial", 10),
+        bg="#f44336",
+        fg="white",
+        width=15,
     ).pack(side="left", padx=10)
 
     choice_window.wait_window()
@@ -224,14 +252,15 @@ def select_project_from_list(projects_folder: str) -> str:
 # PREFIKS DLA RZUTÓW
 # ============================================
 
+
 def get_project_prefix_from_met(met_filepath: str) -> str:
     """
     Generuje prefiks nazw plików na podstawie nazwy pliku .MET.
     Pozwala użytkownikowi edytować proponowany prefiks.
-    
+
     Args:
         met_filepath: Ścieżka do pliku .MET
-    
+
     Returns:
         str: Prefiks zakończony podkreślnikiem (np. "Klatka_schodowa_")
     """
@@ -249,7 +278,7 @@ def get_project_prefix_from_met(met_filepath: str) -> str:
         f"Proponowany prefiks dla rzutów:\n"
         f"Przykład: {auto_prefix}Poz_1.jpg\n\n"
         f"Edytuj prefiks (max {MAX_PREFIX_LENGTH} znaków):",
-        initialvalue=auto_prefix
+        initialvalue=auto_prefix,
     )
 
     if not prefix:
@@ -267,14 +296,15 @@ def get_project_prefix_from_met(met_filepath: str) -> str:
 # WALIDACJA SYSTEMU
 # ============================================
 
+
 def validate_system_name(system: str) -> str:
     """
     Waliduje nazwę systemu profili.
     Sugeruje poprawki przy literówkach.
-    
+
     Args:
         system: Nazwa systemu do walidacji
-    
+
     Returns:
         str: Zwalidowana nazwa lub None
     """
@@ -298,7 +328,7 @@ def validate_system_name(system: str) -> str:
             f"Wpisano: {system}\n\n"
             f"Czy chodziło o: {matches[0]}?\n\n"
             f"TAK - użyj {matches[0]}\n"
-            f"NIE - użyj '{system}'"
+            f"NIE - użyj '{system}'",
         )
         if suggestion:
             print(f"✅ Poprawiono: {system} → {matches[0]}")
@@ -308,7 +338,7 @@ def validate_system_name(system: str) -> str:
         "Uwaga!",
         f"Używam: {system}\n\n"
         f"⚠️ To nieznany system!\n"
-        f"Literówka spowoduje CHAOS w bazie danych."
+        f"Literówka spowoduje CHAOS w bazie danych.",
     )
     return system
 
@@ -316,11 +346,11 @@ def validate_system_name(system: str) -> str:
 def validate_and_choose_system(csv_path: str, extract_system_fn) -> str:
     """
     Wykrywa system z CSV i pozwala użytkownikowi potwierdzić/poprawić.
-    
+
     Args:
         csv_path: Ścieżka do pliku CSV
         extract_system_fn: Funkcja wyciągająca system z CSV
-    
+
     Returns:
         str: Nazwa systemu lub None
     """
@@ -333,7 +363,7 @@ def validate_and_choose_system(csv_path: str, extract_system_fn) -> str:
             "System nieznany",
             f"Nie wykryto systemu w CSV.\n\n"
             f"Popularne systemy:\n{', '.join(KNOWN_SYSTEMS[:10])}\n\n"
-            f"Wpisz system (małe litery, np. mb-77hs):"
+            f"Wpisz system (małe litery, np. mb-77hs):",
         )
         if system:
             system = system.lower().strip().replace(" ", "")
@@ -354,7 +384,7 @@ def validate_and_choose_system(csv_path: str, extract_system_fn) -> str:
             f"Wykryto: {detected}\n\n"
             f"Czy chodziło o: {matches[0]}?\n\n"
             f"TAK - użyj {matches[0]}\n"
-            f"NIE - użyj '{detected}'"
+            f"NIE - użyj '{detected}'",
         )
         if confirm:
             print(f"✅ Poprawiono: {detected} → {matches[0]}")
@@ -367,7 +397,7 @@ def validate_and_choose_system(csv_path: str, extract_system_fn) -> str:
         f"Wykryto: {detected}\n\n"
         f"To nowy system - kontynuować?\n\n"
         f"TAK - użyj '{detected}'\n"
-        f"NIE - pozwól mi wpisać ręcznie"
+        f"NIE - pozwól mi wpisać ręcznie",
     )
 
     if confirm:
@@ -379,7 +409,7 @@ def validate_and_choose_system(csv_path: str, extract_system_fn) -> str:
         f"Wykryto: {detected}\n\n"
         f"Popularne:\n{', '.join(KNOWN_SYSTEMS[:8])}\n\n"
         f"Wpisz poprawną nazwę:",
-        initialvalue=detected
+        initialvalue=detected,
     )
     if corrected:
         corrected = corrected.lower().strip().replace(" ", "")
@@ -390,10 +420,11 @@ def validate_and_choose_system(csv_path: str, extract_system_fn) -> str:
 # DIALOG KOLORÓW
 # ============================================
 
+
 def confirm_detected_colors(detected_colors: list):
     """
     Pokazuje okno informacyjne z wykrytymi kolorami.
-    
+
     Args:
         detected_colors: Lista kodów kolorów (np. ["B4", "I4", "D"])
     """
@@ -410,7 +441,7 @@ def confirm_detected_colors(detected_colors: list):
         f"Projekt zawiera {len(detected_colors)} kolory:\n\n"
         f"🎨 {colors_text}\n\n"
         f"Wszystkie okucia zostaną zapisane z sufiksem 'X'\n"
-        f"(bez względu na kolor)."
+        f"(bez względu na kolor).",
     )
 
     print(f"    🎨 Kolory w projekcie: {colors_text}")

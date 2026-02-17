@@ -1,0 +1,23 @@
+# .pre-commit-config.yaml
+repos:
+  # 1. Podstawowe czyszczenie (koniec linii, białe znaki)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  # 2. Ruff (Linter - szybkie sprawdzanie błędów)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.2.1
+    hooks:
+      - id: ruff
+        args: [ --fix ]  # Automatycznie naprawiaj proste błędy
+
+  # 3. Black (Formater - styl kodu)
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
