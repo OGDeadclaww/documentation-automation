@@ -368,83 +368,117 @@ def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
 
 def get_data_for_position(csv_path: str, position_number: str, vendor_profile) -> dict:
     """
-    Zwraca profile i okucia przypisane konkretnie do danej pozycji.
-    To jest trudne w CSV, bo dane są często rozrzucone,
-    więc tutaj zrobimy proste przybliżenie na podstawie sekcji.
+    Wyciąga profile i przypisuje je do pozycji.
+    Filtruje akcesoria (np. 060...), które "podszywają się" pod profile,
+    sprawdzając czy wiersz zawiera wymiar (mm).
     """
     rows = _read_csv_rows(csv_path)
     data = {"profiles": [], "hardware": []}
 
-    current_pos = None
+    is_target_pos = False
 
     for row in rows:
         line = ";".join(row)
 
-        # 1. Wykryj pozycję
+        # Wykrywanie początku pozycji
         if "Poz." in line:
             m = POZ_LINE_RE.search(line)
             if m:
-                current_pos = m.group(1)
-            else:
-                current_pos = None  # Reset jeśli nie udało się sparsować numeru
+                found_pos = m.group(1)
+                # Porównujemy jako stringi, żeby uniknąć błędów typów
+                is_target_pos = str(found_pos) == str(position_number)
             continue
 
-        # Jeśli nie jesteśmy w szukanej pozycji, pomiń
-        if current_pos != position_number:
+        if not is_target_pos:
             continue
 
-        # Jesteśmy wewnątrz naszej pozycji
+        # Jesteśmy wewnątrz wybranej pozycji
         r = [clean(c) for c in row]
         if not any(r):
             continue
 
-        # --- ZMIANA TUTAJ: Bardziej restrykcyjna pętla ---
-        # Zamiast szukać w 3 kolumnach, szukamy tylko w pierwszej niepustej,
-        # która wygląda na kod.
+        found_profile_in_row = False
 
-        found_profile = False
-        # Szukamy tylko w kolumnach 0 i 1 (zazwyczaj tam jest kod)
-        for i in range(min(len(r), 2)):
+        # Sprawdzamy pierwsze 3 kolumny pod kątem kodu profilu
+        for i in range(min(len(r), 3)):
             cell = r[i]
             if not cell:
                 continue
 
-            # Próba parsowania
             prof_code = vendor_profile.parse_profile_code(cell)
 
-            # Dodatkowy filtr: Kod musi mieć min. 5 znaków, żeby odsiać np. "L" czy "1"
             if prof_code and len(prof_code) > 4:
-                # To prawdopodobnie profil
-                # Opis jest zazwyczaj w następnej kolumnie
-                desc_idx = i + 1
-                desc = r[desc_idx] if len(r) > desc_idx else "Profil"
+                # --- NOWOŚĆ: Blacklista kodów Reynaers ---
+                # Jeśli kod zaczyna się od znanych prefiksów akcesoriów, to NIE JEST profil.
+                if prof_code.startswith(
+                    (
+                        "060.",
+                        "061.",
+                        "062.",
+                        "063.",
+                        "064.",
+                        "065.",
+                        "066.",
+                        "067.",
+                        "068.",
+                        "069.",
+                        "160.",
+                        "161.",
+                        "162.",
+                        "163.",
+                        "164.",
+                        "165.",
+                        "166.",
+                        "167.",
+                        "168.",
+                        "169.",
+                    )
+                ):
+                    continue  # To na pewno akcesorium/okucie, pomiń jako profil
 
-                # Ilość i wymiar to heurystyka (zgadywanie)
-                # Często: Kod | Opis | Ilość | Jedn | Wymiar
+                has_dimension = False
                 qty = "1"
                 dims = ""
-                # Szukamy cyfr w dalszych kolumnach
-                for j in range(i + 2, min(len(r), i + 6)):
+
+                # Skanujemy resztę wiersza
+                for j in range(i + 1, min(len(r), i + 6)):
                     val = r[j].lower()
-                    if "szt" in val or val.isdigit() or "," in val:
+
+                    # Ilość (np. "2 szt", "4")
+                    if "szt" in val or (val.isdigit() and len(val) < 3):
                         if not qty or qty == "1":
                             qty = r[j]
-                    if "mm" in val or (val.replace(".", "").isdigit() and len(val) > 2):
+
+                    # Wymiar (np. "2450 mm", "514,0")
+                    # Kryterium: zawiera "mm" LUB (jest liczbą i ma > 3 znaki) LUB (ma przecinek i cyfry)
+                    if (
+                        "mm" in val
+                        or (val.replace(".", "").isdigit() and len(val) > 2)
+                        or ("," in val and any(char.isdigit() for char in val))
+                    ):
                         dims = r[j]
+                        has_dimension = True
 
-                data["profiles"].append(
-                    {
-                        "code": prof_code,
-                        "desc": desc,
-                        "quantity": qty,
-                        "dimensions": dims,
-                        "location": "—",
-                    }
-                )
-                found_profile = True
-                break  # Znaleziono w tym wierszu, koniec
+                # KLUCZOWY FILTR:
+                # Jeśli znaleźliśmy wymiar (długość cięcia) -> To jest PROFIL.
+                # Jeśli nie ma wymiaru (tylko sztuki) -> To jest AKCESORIUM (ignorujemy w tej tabeli).
+                if has_dimension:
+                    desc_idx = i + 1
+                    desc = r[desc_idx] if len(r) > desc_idx else "Profil"
 
-        if found_profile:
+                    data["profiles"].append(
+                        {
+                            "code": prof_code,
+                            "desc": desc,
+                            "quantity": qty,
+                            "dimensions": dims,
+                            "location": "—",
+                        }
+                    )
+                    found_profile_in_row = True
+                    break  # Znaleziono profil w tym wierszu, koniec szukania w kolumnach
+
+        if found_profile_in_row:
             continue
 
     return data

@@ -12,6 +12,7 @@ from csv_parser import (
     get_data_for_position,
 )
 from config import PROJECTS_IMAGES
+from gui import select_file, select_folder, select_vendor
 
 # KONFIGURACJA ŚCIEŻEK
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -65,7 +66,11 @@ def _get_view_for_position(project_name, pos_num):
         # Zakładamy strukturę:
         # /Dokumentacja/scripts/output (tu powstaje MD)
         # /Dokumentacja/projects_images (tu są zdjęcia)
-        return f"../../projects_images/{project_name}/views/{filename}"
+        # ⚠️ URL Encoding dla Markdown
+        # project_name może zawierać spacje (np. "Produkcja Beddeleem")
+        safe_project_name = project_name.replace(" ", "%20")
+
+        return f"../../projects_images/{safe_project_name}/views/{filename}"
 
     return "../../logo.png"  # Placeholder jeśli brak zdjęcia (lub pusta ścieżka)
 
@@ -101,23 +106,40 @@ def _get_profiles_for_position(csv_path, pos_num, vendor_key, vendor_cls, sys_na
 def _get_hardware_for_position(hardware_raw, pos_num, vendor_key):
     """
     Filtruje globalną listę okuć dla konkretnej pozycji.
+    Zwraca listę słowników gotowych dla Jinja2.
     """
     pos_hardware = []
+
+    # Konwersja szukanego numeru na string (np. 1 -> "1")
+    target_pos_str = str(pos_num).strip()
+
     for code, details in hardware_raw.items():
-        if pos_num in details["positions"]:
-            # Ścieżka do zdjęcia okucia
-            img_path = f"../../images_db/{vendor_key}/hardware/{code}.jpg"
+        # Pobieramy zbiór pozycji przypisanych do tego okucia
+        # Konwertujemy każdy element zbioru na string i czyścimy białe znaki
+        assigned_positions = {str(p).strip() for p in details.get("positions", [])}
+
+        if target_pos_str in assigned_positions:
+            # Okucie należy do tej pozycji!
+
+            # Budujemy ścieżkę do obrazka
+            # Uwaga: Kod okucia może zawierać spacje, w URL zamieniamy na %20
+            safe_code = code.replace(" ", "%20")
+            img_path = f"../../images_db/{vendor_key}/hardware/{safe_code}.jpg"
+
+            # Generujemy ID do linkowania w checkliście (bez spacji)
+            checklist_id = f"{code.replace(' ', '_')}_{pos_num}"
 
             pos_hardware.append(
                 {
                     "code": code,
                     "desc": details.get("desc", "Okucie"),
-                    "quantity": "Wg listy",  # TODO: Parsowanie ilości z CSV
+                    "quantity": "Wg listy",  # Ilość per pozycja wymagałaby głębszego parsowania
                     "image_path": img_path,
                     "catalog_link": "#",
-                    "checklist_id": f"{code.replace(' ', '_')}_{pos_num}",  # Unikalne ID do linków
+                    "checklist_id": checklist_id,
                 }
             )
+
     return pos_hardware
 
 
@@ -208,23 +230,39 @@ def prepare_context(csv_file, project_name, vendor_key):
 
 
 if __name__ == "__main__":
-    # Test manualny - ustaw tu prawdziwą ścieżkę do CSV
-    # np. Z:/Projekty/2026/.../LP_dane.csv
+    print("🚀 Tryb Interaktywny Generatora Dokumentacji")
 
-    csv_path = input("Podaj ścieżkę do pliku CSV (lub Enter dla LP_dane.csv): ").strip()
+    # 1. Wybierz CSV (zamiast wpisywać ścieżkę)
+    csv_path = select_file("CSV", "Wybierz plik LP_dane.csv")
     if not csv_path:
-        csv_path = "LP_dane.csv"
+        print("❌ Anulowano wybór pliku.")
+        exit()
 
-    project_name = input("Podaj nazwę projektu (folder w projects_images): ").strip()
-    if not project_name:
-        project_name = "Test_Project"
+    # 2. Wybierz Projekt (Folder ze zdjęciami)
+    # Zamiast wpisywać nazwę folderu ręcznie, po prostu go wskaż
+    base_proj_dir = os.path.join(PROJECTS_IMAGES)  # Z config.py
+    print(f"📂 Wybierz folder projektu w: {base_proj_dir}")
+    project_dir = select_folder("Wybierz folder projektu (zrzuty)")
 
-    vendor = input("Podaj dostawcę (aluprof/reynaers): ").strip().lower()
-    if not vendor:
-        vendor = "aluprof"
+    if not project_dir:
+        print("❌ Anulowano wybór projektu.")
+        exit()
 
+    project_name = os.path.basename(project_dir)
+    print(f"✅ Wybrano projekt: {project_name}")
+
+    # 3. Wybierz Dostawcę
+    vendor_profile = select_vendor()
+    if not vendor_profile:
+        print("❌ Anulowano wybór dostawcy.")
+        exit()
+
+    vendor_key = vendor_profile.KEY
+    print(f"✅ Wybrano dostawcę: {vendor_key}")
+
+    # Uruchom generator
     if os.path.exists(csv_path):
-        ctx = prepare_context(csv_path, project_name, vendor)
+        ctx = prepare_context(csv_path, project_name, vendor_key)
         render_markdown(ctx)
     else:
         print(f"❌ Plik nie istnieje: {csv_path}")
