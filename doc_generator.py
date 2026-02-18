@@ -13,6 +13,7 @@ from csv_parser import (
 )
 from config import PROJECTS_IMAGES
 from gui import select_file, select_folder, select_vendor
+from db_builder import build_product_db
 
 # KONFIGURACJA ŚCIEŻEK
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -75,11 +76,13 @@ def _get_view_for_position(project_name, pos_num):
     return "../../logo.png"  # Placeholder jeśli brak zdjęcia (lub pusta ścieżka)
 
 
-def _get_profiles_for_position(csv_path, pos_num, vendor_key, vendor_cls, sys_name):
+def _get_profiles_for_position(
+    csv_path, pos_num, vendor_key, vendor_cls, sys_name, product_db
+):
     """
     Pobiera i przetwarza profile dla pozycji.
     """
-    raw_data = get_data_for_position(csv_path, pos_num, vendor_cls)
+    raw_data = get_data_for_position(csv_path, pos_num, vendor_cls, product_db)
     processed_profiles = []
 
     for prof in raw_data["profiles"]:
@@ -148,11 +151,14 @@ def _get_hardware_for_position(hardware_raw, pos_num, vendor_key):
 # ==========================================
 
 
-def prepare_context(csv_file, project_name, vendor_key):
+def prepare_context(csv_file, zm_file, project_name, vendor_key):  # Dodano zm_file
     """
     Główny kontroler - zbiera dane z modułów i pakuje w słownik dla Jinja2.
     """
     print(f"⚙️  Generowanie danych dla: {project_name}...")
+
+    # 1. Budowanie Bazy Wiedzy
+    product_db = build_product_db(zm_file)
 
     vendor_cls = get_vendor_by_key(vendor_key)
 
@@ -205,7 +211,7 @@ def prepare_context(csv_file, project_name, vendor_key):
             # Używamy modułów pomocniczych!
             view_path = _get_view_for_position(project_name, pos_num)
             profiles = _get_profiles_for_position(
-                csv_file, pos_num, vendor_key, vendor_cls, sys_name
+                csv_file, pos_num, vendor_key, vendor_cls, sys_name, product_db
             )
             hardware = _get_hardware_for_position(hardware_raw, pos_num, vendor_key)
 
@@ -233,9 +239,14 @@ if __name__ == "__main__":
     print("🚀 Tryb Interaktywny Generatora Dokumentacji")
 
     # 1. Wybierz CSV (zamiast wpisywać ścieżkę)
-    csv_path = select_file("CSV", "Wybierz plik LP_dane.csv")
+    csv_path = select_file("CSV", "Wybierz plik LP_dane.csv (Ilości)")
     if not csv_path:
         print("❌ Anulowano wybór pliku.")
+        exit()
+    # 1b. Wybierz CSV (ZM) - NOWOŚĆ
+    zm_path = select_file("CSV", "Wybierz plik ZM_dane.csv (Baza Wiedzy)")
+    if not zm_path:
+        print("❌ Anulowano wybór pliku ZM.")
         exit()
 
     # 2. Wybierz Projekt (Folder ze zdjęciami)
@@ -262,7 +273,7 @@ if __name__ == "__main__":
 
     # Uruchom generator
     if os.path.exists(csv_path):
-        ctx = prepare_context(csv_path, project_name, vendor_key)
+        ctx = prepare_context(csv_path, zm_path, project_name, vendor_key)
         render_markdown(ctx)
     else:
         print(f"❌ Plik nie istnieje: {csv_path}")
