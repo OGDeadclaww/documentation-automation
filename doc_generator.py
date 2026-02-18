@@ -150,6 +150,10 @@ def _get_profiles_for_position(
                 "dimensions": [],
                 "locations": [],
             }
+        else:
+            # Uzupełnij opis jeśli był pusty, a teraz jest
+            if not grouped[display_code]["desc"] and prof["desc"]:
+                grouped[display_code]["desc"] = prof["desc"]
 
         if prof["quantity"]:
             grouped[display_code]["quantities"].append(prof["quantity"])
@@ -160,7 +164,6 @@ def _get_profiles_for_position(
 
     processed_profiles = []
     for code, data in grouped.items():
-        # Zachowanie kolejności unikalnych lokalizacji (A, B, A..B zamiast losowo)
         unique_locs = list(dict.fromkeys(data["locations"]))
 
         processed_profiles.append(
@@ -226,19 +229,13 @@ def prepare_context(csv_file, zm_file, project_folder_name, vendor_key):
     print(f"⚙️  Generowanie danych dla: {project_folder_name}...")
 
     vendor_cls = get_vendor_by_key(vendor_key)
-
-    # 1. Parsowanie Nazwy
     proj_info = _parse_project_name(project_folder_name)
 
-    # 2. Ścieżka PDF
     pdf_dir = os.path.join(BASE_PATH, "projects", project_folder_name)
     pdf_filename = f"{project_folder_name}.pdf"
     pdf_output_path = os.path.join(pdf_dir, pdf_filename).replace("\\", "/")
 
-    # 3. Baza Wiedzy
     product_db = build_product_db(zm_file)
-
-    # 4. Dane z CSV (Pozycje)
     systems_map = get_positions_with_systems(csv_file)
 
     timestamp = datetime.datetime.now().strftime("%d.%m.%Y")
@@ -253,7 +250,7 @@ def prepare_context(csv_file, zm_file, project_folder_name, vendor_key):
         "author": os.getlogin(),
         "systems": list(systems_map.keys()),
         "systems_data": {},
-        "global_hardware": [],  # Zostanie wypełnione dynamicznie
+        "global_hardware": [],
         "documents": [
             {
                 "name": "Lista produkcyjna",
@@ -265,45 +262,41 @@ def prepare_context(csv_file, zm_file, project_folder_name, vendor_key):
         "instructions": [],
     }
 
-    # Słownik pomocniczy do agregacji globalnych okuć (Kod -> Opis)
     all_hardware_map = {}
 
-    # Pętla po Systemach i Pozycjach
     for sys_name, positions in systems_map.items():
         system_entries = []
-
         for pos_num in positions:
-            # Rzuty
             view_path = _get_view_for_position(project_folder_name, pos_num)
 
-            # Profile (Już poprawnie pobierane z DB)
+            # Profile (z uzupełnianiem opisów)
             profiles = _get_profiles_for_position(
                 csv_file, pos_num, vendor_key, vendor_cls, sys_name, product_db
             )
 
-            # Pobieramy surowe dane dla pozycji (Profile + Hardware)
+            # Hardware
             pos_data_new = get_data_for_position(
                 csv_file, pos_num, vendor_cls, product_db
             )
-
-            # Przetwarzanie Hardware dla TEJ pozycji
             hardware_list = []
+
             for hw in pos_data_new["hardware"]:
-                code = hw["code"]
+                raw_code = hw["code"]
                 desc = hw["desc"]
 
-                # --- AGREGACJA GLOBALNA ---
-                # Zapisujemy każde unikalne okucie do mapy globalnej
-                if code not in all_hardware_map:
-                    all_hardware_map[code] = desc
+                # Normalizacja XX dla Hardware
+                normalized_code = vendor_cls.parse_profile_code(raw_code)
+                display_code = normalized_code if normalized_code else raw_code
 
-                # Przygotowanie do wyświetlenia w tabeli pozycji
-                safe_code = code.replace(" ", "%20")
-                checklist_id = f"{code.replace(' ', '_')}_{pos_num}"
+                if display_code not in all_hardware_map:
+                    all_hardware_map[display_code] = desc
+
+                safe_code = display_code.replace(" ", "%20")
+                checklist_id = f"{display_code.replace(' ', '_')}_{pos_num}"
 
                 hardware_list.append(
                     {
-                        "code": code,
+                        "code": display_code,
                         "desc": desc,
                         "quantity": hw["quantity"],
                         "image_path": f"../../images_db/{vendor_key}/hardware/{safe_code}.jpg",
@@ -312,6 +305,7 @@ def prepare_context(csv_file, zm_file, project_folder_name, vendor_key):
                     }
                 )
 
+            hardware_list.sort(key=lambda x: x["code"])
             notes_placeholder = f"__BALOON_NOTES_PLACEHOLDER__POZ_{pos_num}__"
 
             system_entries.append(
@@ -326,7 +320,6 @@ def prepare_context(csv_file, zm_file, project_folder_name, vendor_key):
 
         context["systems_data"][sys_name] = system_entries
 
-    # Wypełnianie listy Global Hardware (dla tabeli na początku dokumentu)
     for code, desc in sorted(all_hardware_map.items()):
         img_path = f"../../images_db/{vendor_key}/hardware/{code}.jpg"
         context["global_hardware"].append(

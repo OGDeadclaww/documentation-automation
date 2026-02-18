@@ -124,8 +124,16 @@ def get_data_for_position(
             cell = r[i].strip()
             if not cell:
                 continue
+
+            # --- FILTR 1: Musi mieć cyfrę ---
             if not any(c.isdigit() for c in cell):
                 continue
+
+            # --- FILTR 2: Musi zaczynać się od cyfry (Kluczowy dla Reynaers) ---
+            if not cell[0].isdigit():
+                continue
+
+            # --- FILTR 3: Nie może być długim opisem ---
             if len(cell) > 20 and " " in cell:
                 if any(c in "ąęśżźćńółĄĘŚŻŹĆŃÓŁ" for c in cell):
                     continue
@@ -134,15 +142,11 @@ def get_data_for_position(
                 if "." not in cell[:10]:
                     continue
 
-            # --- NORMALIZACJA KLUCZA ---
+            # --- FILTR 4: Baza lub Struktura ---
             clean_key = normalize_key(cell)
-
-            # A. Baza Wiedzy (szukamy po czystym kluczu)
             if product_db and clean_key in product_db:
-                new_code = cell  # Zachowujemy oryginał z LP do wyświetlania
+                new_code = cell
                 break
-
-            # B. Heurystyka (Regex)
             elif "." in cell and len(cell) > 5:
                 if cell[3] == ".":
                     new_code = cell
@@ -153,7 +157,6 @@ def get_data_for_position(
             active_profile_code = new_code
             clean_key = normalize_key(new_code)
 
-            # Pobieranie typu i opisu z bazy
             if product_db and clean_key in product_db:
                 active_item_type = product_db[clean_key]["type"]
                 active_profile_desc = product_db[clean_key]["desc"]
@@ -194,6 +197,21 @@ def get_data_for_position(
         # --- B: Kontynuacja ---
         elif active_profile_code:
             qty, dim, loc = _extract_dims(r, col_idx)
+
+            potential_desc = ""
+            if not qty and not dim:
+                for i in range(min(len(r), 2)):
+                    cell = r[i].strip()
+                    if cell and len(cell) > 3:
+                        potential_desc = cell
+                        break
+
+            if potential_desc and not active_profile_desc:
+                active_profile_desc = potential_desc
+                if active_item_type == "profile" and data["profiles"]:
+                    data["profiles"][-1]["desc"] = active_profile_desc
+                elif active_item_type == "hardware" and data["hardware"]:
+                    data["hardware"][-1]["desc"] = active_profile_desc
 
             is_valid_dim = False
             if dim:
