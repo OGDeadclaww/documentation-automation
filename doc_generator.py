@@ -76,32 +76,79 @@ def _get_view_for_position(project_name, pos_num):
     return "../../logo.png"  # Placeholder jeśli brak zdjęcia (lub pusta ścieżka)
 
 
+def _normalize_reynaers_code(code):
+    """
+    Zamienia sufiks koloru na XX.
+    Np. 108.0081.59 7021-2 -> 108.0081.XX
+    """
+    parts = code.split(".")
+    if len(parts) >= 3:
+        # Zastępujemy ostatnią część XX
+        return f"{parts[0]}.{parts[1]}.XX"
+    return code
+
+
+# Zaktualizowana funkcja _get_profiles_for_position
 def _get_profiles_for_position(
     csv_path, pos_num, vendor_key, vendor_cls, sys_name, product_db
 ):
-    """
-    Pobiera i przetwarza profile dla pozycji.
-    """
     raw_data = get_data_for_position(csv_path, pos_num, vendor_cls, product_db)
-    processed_profiles = []
+
+    # GRUPOWANIE (Agregacja)
+    # Słownik: Kod -> {desc, qtys: [], dims: [], locs: [], image: ...}
+    grouped = {}
 
     for prof in raw_data["profiles"]:
-        code_raw = prof["code"]
+        code = prof["code"]
 
-        # Logika ścieżek obrazków (Vendor specific)
-        if vendor_key == "reynaers":
-            sys_folder = sys_name.lower()
-            img_filename = f"{code_raw}.jpg"
-        else:
-            # Aluprof
-            sys_folder = sys_name.lower().replace(" ", "")
-            img_filename = f"{code_raw}.jpg"
+        if code not in grouped:
+            # Ustalanie ścieżki obrazka
+            img_filename = code
+            if vendor_key == "reynaers":
+                # Używamy znormalizowanego kodu z .XX
+                normalized_code = _normalize_reynaers_code(code)
+                img_filename = f"{normalized_code}.jpg"
+                sys_folder = sys_name.lower()
+            else:
+                sys_folder = sys_name.lower().replace(" ", "")
+                img_filename = f"{code}.jpg"
 
-        # Ścieżka do bazy zdjęć
-        img_path = f"../../images_db/{vendor_key}/profiles/{sys_folder}/{img_filename}"
+            img_path = (
+                f"../../images_db/{vendor_key}/profiles/{sys_folder}/{img_filename}"
+            )
 
-        prof["image_path"] = img_path
-        processed_profiles.append(prof)
+            grouped[code] = {
+                "code": code,
+                "desc": prof["desc"],
+                "image_path": img_path.replace(" ", "%20"),
+                "quantities": [],
+                "dimensions": [],
+                "locations": [],
+            }
+
+        # Dodajemy dane do list (jeśli nie puste)
+        if prof["quantity"]:
+            grouped[code]["quantities"].append(prof["quantity"])
+        if prof["dimensions"]:
+            grouped[code]["dimensions"].append(prof["dimensions"])
+        if prof["location"] and prof["location"] != "—":
+            grouped[code]["locations"].append(prof["location"])
+
+    # Konwersja na listę dla Jinja2 (z <br>)
+    processed_profiles = []
+    for code, data in grouped.items():
+        processed_profiles.append(
+            {
+                "code": code,
+                "desc": data["desc"],
+                "image_path": data["image_path"],
+                "quantity": "<br>".join(data["quantities"]),
+                "dimensions": "<br>".join(data["dimensions"]),
+                "location": (
+                    "<br>".join(set(data["locations"])) if data["locations"] else "—"
+                ),  # Set dla unikalnych lokalizacji
+            }
+        )
 
     return processed_profiles
 

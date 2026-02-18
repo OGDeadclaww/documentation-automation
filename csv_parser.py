@@ -367,8 +367,7 @@ def get_data_for_position(
     csv_path: str, position_number: str, vendor_profile, product_db=None
 ) -> dict:
     """
-    Wyciąga dane dla pozycji z LP_dane.csv.
-    Używa product_db (z pliku ZM) do identyfikacji typu elementu (Profil vs Okucie).
+    Zaawansowany parser z obsługą wielowierszowych wymiarów.
     """
     rows = _read_csv_rows(csv_path)
     data = {"profiles": [], "hardware": []}
@@ -376,85 +375,160 @@ def get_data_for_position(
     target_pos = str(position_number).strip()
     is_target_pos = False
 
+    # Stan parsera wewnątrz pozycji
+    active_profile_code = None
+    active_profile_desc = ""
+
+    # Indeksy kolumn (odkrywane dynamicznie)
+    col_idx = {"qty": None, "dim": None, "loc": None}
+
     for row in rows:
         line = ";".join(row)
 
-        # Wykrywanie początku pozycji
+        # 1. Wykrywanie Pozycji
         if "Poz." in line:
             m = POZ_LINE_RE.search(line)
             if m:
                 found_pos = m.group(1)
                 is_target_pos = str(found_pos) == target_pos
+                # Reset stanu przy nowej pozycji
+                active_profile_code = None
+                col_idx = {"qty": None, "dim": None, "loc": None}
             continue
 
         if not is_target_pos:
             continue
 
-        # Jesteśmy wewnątrz pozycji. Szukamy kodów.
         r = [clean(c) for c in row]
         if not any(r):
             continue
 
-        found_item = False
-
-        # Skanujemy pierwsze 3 kolumny
-        for i in range(min(len(r), 3)):
-            cell = r[i]
-            if not cell:
-                continue
-
-            # Czyścimy kod (czasem są spacje)
-            code = cell.strip()
-
-            # --- UŻYCIE BAZY WIEDZY ---
-            if product_db and code in product_db:
-                # Mamy pewność co to jest!
-                item_type = product_db[code]["type"]
-                # Opis bierzemy z bazy (jest ładniejszy) lub z CSV (jest kontekstowy)
-                # Bierzemy z bazy ZM, bo tam są pełne nazwy (np. "POPRZECZKA 102MM")
-                desc = product_db[code]["desc"]
-
-                # Ilość i Wymiar bierzemy z LP_dane.csv (bo tu są per pozycja)
-                qty = "1"
-                dims = ""
-                # Szukamy w dalszych kolumnach
-                for j in range(i + 1, min(len(r), i + 6)):
-                    val = r[j].lower()
-                    if "szt" in val or (val.isdigit() and len(val) < 3):
-                        if not qty or qty == "1":
-                            qty = r[j]
-                    if (
-                        "mm" in val
-                        or (val.replace(".", "").isdigit() and len(val) > 2)
-                        or ("," in val and any(char.isdigit() for char in val))
-                    ):
-                        dims = r[j]
-
-                entry = {
-                    "code": code,
-                    "desc": desc,
-                    "quantity": qty,
-                    "dimensions": dims,
-                    "location": "—",  # TODO: Parsowanie lokalizacji (A..B)
-                }
-
-                if item_type == "profile":
-                    data["profiles"].append(entry)
-                else:
-                    data["hardware"].append(entry)
-
-                found_item = True
-                break
-
-            # --- FALLBACK (Jeśli kodu nie ma w ZM - np. błąd ludzki) ---
-            # Używamy starej logiki (regexy/mm)
-            # Tylko jeśli nie mamy product_db lub kod jest nowy
-            elif not product_db:
-                # Tu wklej starą logikę z poprzedniej wersji (has_dimension etc.)
-                # Dla uproszczenia w tym przykładzie pomijam, zakładamy że ZM jest kompletne.
-                pass
-
-        if found_item:
+        # 2. Wykrywanie nagłówków tabeli (żeby wiedzieć gdzie są dane)
+        # Szukamy wiersza, który ma "Ilość", "Wymiary", "Położenie"
+        if "Ilo" in line and "Wymiar" in line:
+            for i, col in enumerate(r):
+                cl = col.lower()
+                if "ilo" in cl:
+                    col_idx["qty"] = i
+                elif "wymiar" in cl:
+                    col_idx["dim"] = i
+                elif "ołożenie" in cl or "olozenie" in cl:
+                    col_idx["loc"] = i
             continue
 
+        # 3. Analiza Wiersza Danych
+        # Sprawdzamy czy wiersz zawiera nowy KOD PRODUKTU (w pierwszych kolumnach)
+        new_code_found = None
+        for i in range(min(len(r), 3)):
+            if r[i] and product_db and r[i] in product_db:
+                new_code_found = r[i]
+                break
+            # Fallback regexem jeśli brak w DB, ale wygląda jak profil Reynaers (z kropkami)
+            elif r[i] and not product_db and "." in r[i] and len(r[i]) > 5:
+                new_code_found = r[i]
+                break
+
+        # Scenariusz A: Nowy Profil/Element
+        if new_code_found:
+            active_profile_code = new_code_found
+
+            # Pobieramy opis z bazy lub (jeśli puste) z CSV (często jest w następnej linii, ale tu upraszczamy)
+            active_profile_desc = (
+                product_db[new_code_found]["desc"]
+                if (product_db and new_code_found in product_db)
+                else "Profil"
+            )
+
+            # Sprawdzamy typ
+            item_type = "profile"  # Domyślnie
+            if product_db and new_code_found in product_db:
+                item_type = product_db[new_code_found]["type"]
+            elif new_code_found.startswith(
+                ("06", "16", "05")
+            ):  # Heurystyka dla Reynaers
+                item_type = "hardware"
+
+            # Parsujemy dane z TEGO SAMEGO wiersza
+            qty, dim, loc = _extract_dims(r, col_idx)
+
+            entry = {
+                "code": active_profile_code,
+                "desc": active_profile_desc,
+                "quantity": qty,
+                "dimensions": dim,
+                "location": loc,
+                "type": item_type,  # Tymczasowe pole pomocnicze
+            }
+
+            if item_type == "profile":
+                data["profiles"].append(entry)
+            else:
+                data["hardware"].append(entry)
+
+        # Scenariusz B: Kontynuacja poprzedniego profilu (kolejny wymiar w nowej linii)
+        elif active_profile_code:
+            # Jeśli nie ma kodu, ale są wymiary -> to kolejny kawałek tego samego profilu
+            qty, dim, loc = _extract_dims(r, col_idx)
+
+            if qty or dim:
+                # Znajdź ostatni wpis z tym kodem i dodaj go jako NOWY wpis
+                # (Grupowaniem zajmie się doc_generator, tutaj zwracamy płaską listę)
+
+                # Musimy wiedzieć czy to był profil czy hardware
+                # Sprawdzamy ostatni element w listach
+                last_type = "profile"  # Zgadujemy
+                if (
+                    data["profiles"]
+                    and data["profiles"][-1]["code"] == active_profile_code
+                ):
+                    last_type = "profile"
+                elif (
+                    data["hardware"]
+                    and data["hardware"][-1]["code"] == active_profile_code
+                ):
+                    last_type = "hardware"
+
+                new_entry = {
+                    "code": active_profile_code,
+                    "desc": active_profile_desc,
+                    "quantity": qty,
+                    "dimensions": dim,
+                    "location": loc,
+                }
+
+                if last_type == "profile":
+                    data["profiles"].append(new_entry)
+                else:
+                    data["hardware"].append(new_entry)
+
     return data
+
+
+def _extract_dims(row, idx_map):
+    """Pomocnicza: wyciąga dane z kolumn na podstawie mapy indeksów."""
+    qty = (
+        row[idx_map["qty"]]
+        if idx_map["qty"] is not None and idx_map["qty"] < len(row)
+        else ""
+    )
+    dim = (
+        row[idx_map["dim"]]
+        if idx_map["dim"] is not None and idx_map["dim"] < len(row)
+        else ""
+    )
+    loc = (
+        row[idx_map["loc"]]
+        if idx_map["loc"] is not None and idx_map["loc"] < len(row)
+        else ""
+    )
+
+    # Fallback heurystyczny jeśli nie wykryto nagłówków
+    if not qty and not dim:
+        for val in row:
+            v = val.lower()
+            if "szt" in v:
+                qty = val
+            elif "mm" in v:
+                dim = val
+
+    return qty, dim, loc
