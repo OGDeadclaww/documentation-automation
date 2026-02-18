@@ -1,4 +1,5 @@
 # doc_generator.py
+import re
 import os
 import glob
 import datetime
@@ -11,7 +12,7 @@ from csv_parser import (
     parse_hardware_from_csv,
     get_data_for_position,
 )
-from config import PROJECTS_IMAGES
+from config import PROJECTS_IMAGES, BASE_PATH
 from gui import select_file, select_folder, select_vendor
 from db_builder import build_product_db
 
@@ -74,6 +75,34 @@ def _get_view_for_position(project_name, pos_num):
         return f"../../projects_images/{safe_project_name}/views/{filename}"
 
     return "../../logo.png"  # Placeholder jeśli brak zdjęcia (lub pusta ścieżka)
+
+
+def _parse_project_name(folder_name):
+    """
+    Rozbija nazwę folderu na części (Klient, Numer, Opis).
+    Input: "2025-18-12_Produkcja Beddeleem_ P241031 BMEIA AUSTRIA"
+    """
+    # 1. Usuwamy datę z początku (RRRR-MM-DD_ lub podobne formaty)
+    # Obsługuje 2025-12-18, 2025-18-12, z podkreślnikiem lub spacją
+    name_clean = re.sub(r"^\d{4}[-.]\d{2}[-.]\d{2}[_ ]?", "", folder_name).strip()
+
+    # 2. Szukamy numeru projektu (P + 5-6 cyfr)
+    match = re.search(r"\b(P\d{5,6})\b", name_clean)
+
+    if match:
+        number = match.group(1)
+        parts = name_clean.split(number)
+
+        # To co przed numerem (np. "Produkcja Beddeleem_ ")
+        client = parts[0].strip(" _-")
+
+        # To co po numerze (np. " BMEIA AUSTRIA")
+        desc = parts[1].strip(" _-") if len(parts) > 1 else ""
+
+        return {"client": client, "number": number, "desc": desc}
+    else:
+        # Fallback: Cała nazwa jako Klient, brak numeru
+        return {"client": name_clean, "number": "", "desc": ""}
 
 
 def _normalize_reynaers_code(code):
@@ -192,34 +221,48 @@ def _get_hardware_for_position(hardware_raw, pos_num, vendor_key):
 # ==========================================
 
 
-def prepare_context(csv_file, zm_file, project_name, vendor_key):  # Dodano zm_file
-    """
-    Główny kontroler - zbiera dane z modułów i pakuje w słownik dla Jinja2.
-    """
-    print(f"⚙️  Generowanie danych dla: {project_name}...")
-
-    # 1. Budowanie Bazy Wiedzy
-    product_db = build_product_db(zm_file)
+def prepare_context(csv_file, zm_file, project_folder_name, vendor_key):
+    print(f"⚙️  Generowanie danych dla: {project_folder_name}...")
 
     vendor_cls = get_vendor_by_key(vendor_key)
 
-    # 1. Dane podstawowe
+    # 1. Parsowanie Nazwy Projektu (Metadata)
+    proj_info = _parse_project_name(project_folder_name)
+
+    # 2. Ścieżka do PDF (Puppeteer)
+    # Ścieżka: BASE_PATH/projects/{FOLDER}/{FOLDER}.pdf
+    pdf_dir = os.path.join(BASE_PATH, "projects", project_folder_name)
+    pdf_filename = f"{project_folder_name}.pdf"
+    # Puppeteer wymaga forward slashy w JSON/YAML
+    pdf_output_path = os.path.join(pdf_dir, pdf_filename).replace("\\", "/")
+
+    # 3. Budowanie Bazy Wiedzy
+    product_db = build_product_db(zm_file)
+
+    # 4. Dane z CSV (LP)
     systems_map = get_positions_with_systems(csv_file)
+    # hardware_raw używamy teraz tylko globalnie, jeśli chcemy listę wszystkich okuć w projekcie
+    # Ale doc_generator pobiera okucia per pozycja w pętli niżej.
+    # Możemy pobrać globalne statystyki dla sekcji "Tabela Okuć i Akcesoriów" na początku dok.
+    # Używamy starego parsera hardware_raw (dla statystyk) lub iterujemy po product_db.
+    # Dla uproszczenia: zostawiamy starą metodę hardware_raw dla tabeli zbiorczej.
     hardware_raw = parse_hardware_from_csv(csv_file, vendor_cls)
+
     timestamp = datetime.datetime.now().strftime("%d.%m.%Y")
 
-    # 2. Inicjalizacja kontekstu
+    # 5. Inicjalizacja kontekstu
     context = {
-        "project_name": project_name,
-        "project_id": "PXXXXXX - BEDDELEEM",  # TODO: Wyciągnąć z nazwy pliku lub .met
+        # Nagłówek
+        "project_client": proj_info["client"],
+        "project_number": proj_info["number"],
+        "project_desc": proj_info["desc"],
         "logo_path": "../../logo.png",
-        "pdf_output_path": f"Z:/Projekty/{project_name}/{project_name}.pdf",
+        "pdf_output_path": pdf_output_path,
         "generation_date": timestamp,
         "author": os.getlogin(),
         "systems": list(systems_map.keys()),
         "systems_data": {},
         "global_hardware": [],
-        # Sekcje dokumentacyjne (na razie mocki lub proste linki)
         "documents": [
             {
                 "name": "Lista produkcyjna",
@@ -231,34 +274,69 @@ def prepare_context(csv_file, zm_file, project_name, vendor_key):  # Dodano zm_f
         "instructions": [],
     }
 
-    # 3. Przetwarzanie Okuć (Tabela zbiorcza)
+    # Tabela zbiorcza okuć (Global)
     for code, details in hardware_raw.items():
+        # Pobieramy opis z Bazy Wiedzy, jeśli dostępny
+        clean_code = code.replace(" ", "")
+        desc = (
+            product_db[clean_code]["desc"]
+            if (product_db and clean_code in product_db)
+            else details.get("desc", "")
+        )
+
+        img_path = f"../../images_db/{vendor_key}/hardware/{code}.jpg"
+
         context["global_hardware"].append(
             {
                 "code": code,
-                "desc": details.get("desc", ""),
-                "image_path": f"../../images_db/{vendor_key}/hardware/{code}.jpg",
+                "desc": desc,
+                "image_path": img_path.replace(" ", "%20"),
                 "catalog_link": "#",
                 "status": "🟡 0/0",
                 "notes": "",
             }
         )
 
-    # 4. Przetwarzanie Systemów i Pozycji (Pętla główna)
+    # Pętla po Systemach i Pozycjach
     for sys_name, positions in systems_map.items():
         system_entries = []
 
         for pos_num in positions:
-            # Używamy modułów pomocniczych!
-            view_path = _get_view_for_position(project_name, pos_num)
+            # Moduły pomocnicze
+            view_path = _get_view_for_position(project_folder_name, pos_num)
+
+            # Profile (z użyciem DB)
             profiles = _get_profiles_for_position(
                 csv_file, pos_num, vendor_key, vendor_cls, sys_name, product_db
             )
-            hardware = _get_hardware_for_position(hardware_raw, pos_num, vendor_key)
 
-            # Placeholder na "Uwagi do konstrukcji"
-            # Baloon notes placeholder to tekst, który ewentualnie podmienisz
-            # innym skryptem lub zostawisz do ręcznej edycji
+            # Hardware (z użyciem DB i LP)
+            # Uwaga: _get_hardware_for_position korzystało ze starego hardware_raw.
+            # Powinniśmy użyć get_data_for_position (nowego parsera), żeby wziąć hardware przypisany do pozycji w CSV!
+            # To ważna zmiana spójności.
+
+            # Pobieramy WSZYSTKO (profile i hardware) z nowego parsera dla tej pozycji
+            pos_data_new = get_data_for_position(
+                csv_file, pos_num, vendor_cls, product_db
+            )
+
+            # Przetwarzanie Hardware z nowego parsera (tak jak Profile)
+            hardware_list = []
+            for hw in pos_data_new["hardware"]:
+                safe_code = hw["code"].replace(" ", "%20")
+                checklist_id = f"{hw['code'].replace(' ', '_')}_{pos_num}"
+
+                hardware_list.append(
+                    {
+                        "code": hw["code"],
+                        "desc": hw["desc"],
+                        "quantity": hw["quantity"],  # Teraz mamy ilość per pozycja!
+                        "image_path": f"../../images_db/{vendor_key}/hardware/{safe_code}.jpg",
+                        "catalog_link": "#",
+                        "checklist_id": checklist_id,
+                    }
+                )
+
             notes_placeholder = f"__BALOON_NOTES_PLACEHOLDER__POZ_{pos_num}__"
 
             system_entries.append(
@@ -266,7 +344,7 @@ def prepare_context(csv_file, zm_file, project_name, vendor_key):  # Dodano zm_f
                     "number": pos_num,
                     "view_image_path": view_path,
                     "profiles": profiles,
-                    "hardware": hardware,
+                    "hardware": hardware_list,  # Używamy nowej listy z ilościami!
                     "construction_notes": notes_placeholder,
                 }
             )
