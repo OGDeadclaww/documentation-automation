@@ -91,25 +91,16 @@ def _normalize_reynaers_code(code):
 def _get_profiles_for_position(
     csv_path, pos_num, vendor_key, vendor_cls, sys_name, product_db
 ):
-    """
-    Pobiera profile, grupuje je i normalizuje kody (XX) używając parsera dostawcy.
-    """
     raw_data = get_data_for_position(csv_path, pos_num, vendor_cls, product_db)
 
-    # GRUPOWANIE (Agregacja)
-    # Słownik: ZnormalizowanyKod -> {desc, qtys: [], dims: [], locs: [], image: ...}
     grouped = {}
 
     for prof in raw_data["profiles"]:
-        raw_code = prof["code"]  # Kod z CSV (np. "108.0081.59 7021-2")
-
-        # Używamy vendor_cls do normalizacji (np. zamiana koloru na XX, zachowanie 17)
+        raw_code = prof["code"]
         normalized_code = vendor_cls.parse_profile_code(raw_code)
-        # Fallback jeśli parser nic nie zwrócił
         display_code = normalized_code if normalized_code else raw_code
 
         if display_code not in grouped:
-            # Ustalanie ścieżki obrazka
             if vendor_key == "reynaers":
                 sys_folder = sys_name.lower()
                 img_filename = f"{display_code}.jpg"
@@ -130,7 +121,6 @@ def _get_profiles_for_position(
                 "locations": [],
             }
 
-        # Dodajemy dane do list
         if prof["quantity"]:
             grouped[display_code]["quantities"].append(prof["quantity"])
         if prof["dimensions"]:
@@ -138,9 +128,11 @@ def _get_profiles_for_position(
         if prof["location"] and prof["location"] != "—":
             grouped[display_code]["locations"].append(prof["location"])
 
-    # Konwersja na listę dla Jinja2
     processed_profiles = []
     for code, data in grouped.items():
+        # Zachowanie kolejności unikalnych lokalizacji (A, B, A..B zamiast losowo)
+        unique_locs = list(dict.fromkeys(data["locations"]))
+
         processed_profiles.append(
             {
                 "code": code,
@@ -148,9 +140,7 @@ def _get_profiles_for_position(
                 "image_path": data["image_path"],
                 "quantity": "<br>".join(data["quantities"]),
                 "dimensions": "<br>".join(data["dimensions"]),
-                "location": (
-                    "<br>".join(set(data["locations"])) if data["locations"] else "—"
-                ),
+                "location": "<br>".join(unique_locs) if unique_locs else "—",
             }
         )
 
