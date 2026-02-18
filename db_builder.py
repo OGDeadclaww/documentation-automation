@@ -1,11 +1,9 @@
-# db_builder.py
 from vendors import clean
 
 
 def normalize_key(code):
     """
-    Usuwa spacje z kodu, aby ułatwić dopasowanie między różnymi plikami CSV.
-    Np. "008.3114.69 W:59 7047" -> "008.3114.69W:597047"
+    Usuwa spacje i białe znaki.
     """
     if not code:
         return ""
@@ -29,39 +27,46 @@ def build_product_db(zm_csv_path: str) -> dict:
 
     # Wczytywanie z detekcją kodowania
     lines = []
-    for encoding in ("cp1250", "utf-8"):
+    # Kolejność: utf-8 (bo czasem excel tak zapisuje), potem cp1250 (windows PL)
+    encodings = ["utf-8", "cp1250", "latin2"]
+
+    for encoding in encodings:
         try:
-            with open(zm_csv_path, "r", encoding=encoding, errors="replace") as f:
+            with open(zm_csv_path, "r", encoding=encoding) as f:
                 lines = f.readlines()
-            break
+            # Test czy polskie znaki są ok (np. 'Ilość')
+            sample = "".join(lines[:10])
+            if "Ilo" in sample and "" not in sample:
+                break
         except Exception:
             continue
 
     if not lines:
-        print("❌ Nie udało się wczytać pliku ZM.")
+        print("❌ Nie udało się wczytać pliku ZM (błąd kodowania).")
         return {}
 
     for line in lines:
         line = line.strip()
-
-        # 1. Wykrywanie Sekcji (szukamy słów kluczowych w surowej linii)
-        found_section = False
-        for key, val in SECTION_MAP.items():
-            # Sekcje w ZM są specyficzne: ;Profile;;;;;
-            if f";{key};" in line:
-                current_section = val
-                found_section = True
-                break
-
-        if found_section or not current_section:
+        if not line:
             continue
 
-        # 2. Parsowanie
+        # 1. Wykrywanie Sekcji
+        # Szukamy "czystych" słów kluczowych w linii
+        # Format w ZM: ;Profile;;;;;
         parts = line.split(";")
+        if len(parts) > 1 and parts[1] in SECTION_MAP:
+            current_section = SECTION_MAP[parts[1]]
+            continue
+
+        if not current_section:
+            continue
+
+        # 2. Parsowanie Danych
+        # Format ZM: ;Kod;Opis;;;Jednostka;...
         if len(parts) < 3:
             continue
 
-        # Kod w kolumnie 1, Opis w 2 (indeksy 0-based: 0=puste, 1=Kod)
+        # Kod w kolumnie 1, Opis w 2
         raw_code = clean(parts[1])
         desc = clean(parts[2])
         unit = clean(parts[5]) if len(parts) > 5 else ""
@@ -70,7 +75,7 @@ def build_product_db(zm_csv_path: str) -> dict:
         key = normalize_key(raw_code)
 
         # Walidacja
-        if len(key) < 3 or "Kodelementu" in key:
+        if len(key) < 3 or "Kodelementu" in key or "Razem:" in key:
             continue
 
         db[key] = {

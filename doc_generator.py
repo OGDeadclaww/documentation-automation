@@ -350,18 +350,35 @@ def _update_project_index(context):
 
     proj_num = context["project_number"] or "UNKNOWN"
 
-    # 1. Zbieramy Okucia (z listy globalnej)
-    hardware_used = set()
-    for hw in context["global_hardware"]:
-        hardware_used.add(hw["code"])
+    # Struktura: System -> {profiles: [], hardware: []}
+    usage_by_system = {}
 
-    # 2. Zbieramy Profile (musimy przejść przez systemy i pozycje)
-    profiles_used = set()
+    # Zbiory globalne do statystyk
+    all_hardware = set()
+    all_profiles = set()
+
     for sys_name, positions in context["systems_data"].items():
+        if sys_name not in usage_by_system:
+            usage_by_system[sys_name] = {"profiles": set(), "hardware": set()}
+
         for pos in positions:
             for prof in pos["profiles"]:
-                # Używamy kodu "display" (z XX), bo jest bardziej generyczny
-                profiles_used.add(prof["code"])
+                code = prof["code"]
+                usage_by_system[sys_name]["profiles"].add(code)
+                all_profiles.add(code)
+
+            for hw in pos["hardware"]:
+                code = hw["code"]
+                usage_by_system[sys_name]["hardware"].add(code)
+                all_hardware.add(code)
+
+    # Konwersja set -> list
+    usage_json = {}
+    for sys, data in usage_by_system.items():
+        usage_json[sys] = {
+            "profiles": sorted(list(data["profiles"])),
+            "hardware": sorted(list(data["hardware"])),
+        }
 
     entry = {
         "date": context["generation_date"],
@@ -370,11 +387,10 @@ def _update_project_index(context):
         "folder": os.path.basename(os.path.dirname(context["pdf_output_path"])),
         "systems": context["systems"],
         "stats": {
-            "hardware_count": len(hardware_used),
-            "profiles_count": len(profiles_used),
+            "hardware_count": len(all_hardware),
+            "profiles_count": len(all_profiles),
         },
-        "hardware_codes": sorted(list(hardware_used)),
-        "profile_codes": sorted(list(profiles_used)),  # <--- NOWOŚĆ
+        "usage_by_system": usage_json,  # <--- Tego brakowało
     }
 
     index[proj_num] = entry

@@ -89,6 +89,17 @@ def get_data_for_position(
     active_item_type = None
     col_idx = {"qty": None, "dim": None, "loc": None}
 
+    IGNORE_SECTIONS = [
+        "akcesoria",
+        "okucia",
+        "profile",
+        "profile dodatkowe",
+        "uszczelki",
+        "kod:",
+        "rysunek",
+    ]
+    GENERIC_DESCS = ["akcesoria", "okucia", "profile", "uszczelki"]
+
     for row in rows:
         line = ";".join(row)
 
@@ -125,15 +136,10 @@ def get_data_for_position(
             if not cell:
                 continue
 
-            # --- FILTR 1: Musi mieć cyfrę ---
             if not any(c.isdigit() for c in cell):
                 continue
-
-            # --- FILTR 2: Musi zaczynać się od cyfry (Kluczowy dla Reynaers) ---
             if not cell[0].isdigit():
                 continue
-
-            # --- FILTR 3: Nie może być długim opisem ---
             if len(cell) > 20 and " " in cell:
                 if any(c in "ąęśżźćńółĄĘŚŻŹĆŃÓŁ" for c in cell):
                     continue
@@ -142,7 +148,6 @@ def get_data_for_position(
                 if "." not in cell[:10]:
                     continue
 
-            # --- FILTR 4: Baza lub Struktura ---
             clean_key = normalize_key(cell)
             if product_db and clean_key in product_db:
                 new_code = cell
@@ -169,6 +174,37 @@ def get_data_for_position(
 
             qty, dim, loc = _extract_dims(r, col_idx)
 
+            # Inline opis (w tym samym wierszu)
+            potential_inline_desc = ""
+            for i, val in enumerate(r):
+                if val == new_code:
+                    continue
+                if val == qty:
+                    continue
+                if val == dim:
+                    continue
+                if val == loc:
+                    continue
+                if len(val) > 3 and not any(c.isdigit() for c in val):
+                    if val.lower() not in IGNORE_SECTIONS:
+                        potential_inline_desc = val
+                        break
+
+            if potential_inline_desc:
+                if (
+                    not active_profile_desc
+                    or active_profile_desc.lower() in GENERIC_DESCS
+                ):
+                    active_profile_desc = potential_inline_desc
+
+            # Sprawdzenie czy dim to nie opis (np. PRET M6/1500MM)
+            if dim:
+                stripped = re.sub(r"[0-9.,\s()';:xXmM/-]", "", dim)
+                if len(stripped) > 2:  # Za dużo liter jak na wymiar
+                    if not active_profile_desc:
+                        active_profile_desc = dim
+                    dim = ""
+
             should_add = False
             if active_item_type == "hardware":
                 should_add = True
@@ -176,11 +212,6 @@ def get_data_for_position(
                 should_add = True
 
             if should_add:
-                if dim:
-                    stripped = re.sub(r"[0-9.,\s()';:xXmM-]", "", dim)
-                    if len(stripped) > 1:
-                        dim = ""
-
                 entry = {
                     "code": active_profile_code,
                     "desc": active_profile_desc,
@@ -198,21 +229,52 @@ def get_data_for_position(
         elif active_profile_code:
             qty, dim, loc = _extract_dims(r, col_idx)
 
-            potential_desc = ""
-            if not qty and not dim:
+            # --- POPRAWKA: Jeśli "wymiar" wygląda jak opis, przesuń go do opisu ---
+            is_dim_actually_desc = False
+            potential_desc_from_dim = ""
+
+            if dim:
+                # Jeśli dim nie ma cyfr -> na pewno opis
+                if not any(c.isdigit() for c in dim):
+                    is_dim_actually_desc = True
+                    potential_desc_from_dim = dim
+                else:
+                    # Jeśli ma cyfry (np. 1500MM), ale też dużo liter (PRET M6)
+                    stripped = re.sub(r"[0-9.,\s()';:xXmM/-]", "", dim)
+                    if len(stripped) > 2:
+                        is_dim_actually_desc = True
+                        potential_desc_from_dim = dim
+
+            if is_dim_actually_desc:
+                dim = ""  # Zerujemy wymiar, bo to był opis
+
+            # Wykrywanie Opisu w wierszu
+            potential_desc = potential_desc_from_dim
+            if not potential_desc and not qty and not dim:
                 for i in range(min(len(r), 2)):
                     cell = r[i].strip()
                     if cell and len(cell) > 3:
+                        if cell.lower() in IGNORE_SECTIONS:
+                            continue
                         potential_desc = cell
                         break
 
-            if potential_desc and not active_profile_desc:
-                active_profile_desc = potential_desc
-                if active_item_type == "profile" and data["profiles"]:
-                    data["profiles"][-1]["desc"] = active_profile_desc
-                elif active_item_type == "hardware" and data["hardware"]:
-                    data["hardware"][-1]["desc"] = active_profile_desc
+            # Aktualizacja opisu
+            if potential_desc:
+                if (
+                    not active_profile_desc
+                    or active_profile_desc.lower() in GENERIC_DESCS
+                ):
+                    active_profile_desc = potential_desc
+                    target_list = (
+                        data["profiles"]
+                        if active_item_type == "profile"
+                        else data["hardware"]
+                    )
+                    if target_list:
+                        target_list[-1]["desc"] = active_profile_desc
 
+            # Walidacja i dodawanie danych
             is_valid_dim = False
             if dim:
                 stripped = re.sub(r"[0-9.,\s()';:xXmM-]", "", dim)
