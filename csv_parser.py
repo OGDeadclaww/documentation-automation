@@ -367,7 +367,7 @@ def get_data_for_position(
     csv_path: str, position_number: str, vendor_profile, product_db=None
 ) -> dict:
     """
-    Zaawansowany parser z obsługą wielowierszowych wymiarów.
+    Zaawansowany parser z obsługą wielowierszowych wymiarów i detekcją sekcji.
     """
     rows = _read_csv_rows(csv_path)
     data = {"profiles": [], "hardware": []}
@@ -375,11 +375,12 @@ def get_data_for_position(
     target_pos = str(position_number).strip()
     is_target_pos = False
 
-    # Stan parsera wewnątrz pozycji
+    # Stan parsera
     active_profile_code = None
     active_profile_desc = ""
+    active_item_type = None  # 'profile' lub 'hardware'
 
-    # Indeksy kolumn (odkrywane dynamicznie)
+    # Indeksy kolumn
     col_idx = {"qty": None, "dim": None, "loc": None}
 
     for row in rows:
@@ -391,7 +392,6 @@ def get_data_for_position(
             if m:
                 found_pos = m.group(1)
                 is_target_pos = str(found_pos) == target_pos
-                # Reset stanu przy nowej pozycji
                 active_profile_code = None
                 col_idx = {"qty": None, "dim": None, "loc": None}
             continue
@@ -403,8 +403,7 @@ def get_data_for_position(
         if not any(r):
             continue
 
-        # 2. Wykrywanie nagłówków tabeli (żeby wiedzieć gdzie są dane)
-        # Szukamy wiersza, który ma "Ilość", "Wymiary", "Położenie"
+        # 2. Wykrywanie nagłówków
         if "Ilo" in line and "Wymiar" in line:
             for i, col in enumerate(r):
                 cl = col.lower()
@@ -416,90 +415,85 @@ def get_data_for_position(
                     col_idx["loc"] = i
             continue
 
-        # 3. Analiza Wiersza Danych
-        # Sprawdzamy czy wiersz zawiera nowy KOD PRODUKTU (w pierwszych kolumnach)
+        # 3. Wykrywanie NOWEGO KODU (Produkt lub Akcesorium)
         new_code_found = None
+        new_item_type = None
+
         for i in range(min(len(r), 3)):
-            if r[i] and product_db and r[i] in product_db:
-                new_code_found = r[i]
-                break
-            # Fallback regexem jeśli brak w DB, ale wygląda jak profil Reynaers (z kropkami)
-            elif r[i] and not product_db and "." in r[i] and len(r[i]) > 5:
-                new_code_found = r[i]
+            cell = r[i].strip()
+            if not cell:
+                continue
+
+            # A. Baza Wiedzy (ZM)
+            if product_db and cell in product_db:
+                new_code_found = cell
+                new_item_type = product_db[cell]["type"]  # 'profile' lub 'hardware'
                 break
 
-        # Scenariusz A: Nowy Profil/Element
+            # B. Heurystyka (Regex) - żeby przerwać pętlę poprzedniego profilu
+            elif "." in cell and len(cell) > 5 and any(c.isdigit() for c in cell):
+                new_code_found = cell
+                # Zgadujemy typ (domyślnie hardware, chyba że wygląda na profil)
+                # Ale dla Reynaers 008, 108, 408, 508 to zazwyczaj profile
+                if cell.startswith(("008", "030", "108", "408", "508")):
+                    new_item_type = "profile"
+                else:
+                    new_item_type = "hardware"
+                break
+
+        # --- SCENARIUSZ A: Nowy Element ---
         if new_code_found:
             active_profile_code = new_code_found
+            active_item_type = new_item_type
 
-            # Pobieramy opis z bazy lub (jeśli puste) z CSV (często jest w następnej linii, ale tu upraszczamy)
-            active_profile_desc = (
-                product_db[new_code_found]["desc"]
-                if (product_db and new_code_found in product_db)
-                else "Profil"
-            )
-
-            # Sprawdzamy typ
-            item_type = "profile"  # Domyślnie
+            # Opis
             if product_db and new_code_found in product_db:
-                item_type = product_db[new_code_found]["type"]
-            elif new_code_found.startswith(
-                ("06", "16", "05")
-            ):  # Heurystyka dla Reynaers
-                item_type = "hardware"
-
-            # Parsujemy dane z TEGO SAMEGO wiersza
-            qty, dim, loc = _extract_dims(r, col_idx)
-
-            entry = {
-                "code": active_profile_code,
-                "desc": active_profile_desc,
-                "quantity": qty,
-                "dimensions": dim,
-                "location": loc,
-                "type": item_type,  # Tymczasowe pole pomocnicze
-            }
-
-            if item_type == "profile":
-                data["profiles"].append(entry)
+                active_profile_desc = product_db[new_code_found]["desc"]
             else:
-                data["hardware"].append(entry)
+                active_profile_desc = ""  # Pusty, nie bierzemy śmieci z CSV
 
-        # Scenariusz B: Kontynuacja poprzedniego profilu (kolejny wymiar w nowej linii)
-        elif active_profile_code:
-            # Jeśli nie ma kodu, ale są wymiary -> to kolejny kawałek tego samego profilu
+            # Dane z tego samego wiersza
             qty, dim, loc = _extract_dims(r, col_idx)
 
+            # Walidacja: Czy to faktycznie dane, czy nagłówek/śmieć?
             if qty or dim:
-                # Znajdź ostatni wpis z tym kodem i dodaj go jako NOWY wpis
-                # (Grupowaniem zajmie się doc_generator, tutaj zwracamy płaską listę)
-
-                # Musimy wiedzieć czy to był profil czy hardware
-                # Sprawdzamy ostatni element w listach
-                last_type = "profile"  # Zgadujemy
-                if (
-                    data["profiles"]
-                    and data["profiles"][-1]["code"] == active_profile_code
-                ):
-                    last_type = "profile"
-                elif (
-                    data["hardware"]
-                    and data["hardware"][-1]["code"] == active_profile_code
-                ):
-                    last_type = "hardware"
-
-                new_entry = {
+                entry = {
                     "code": active_profile_code,
                     "desc": active_profile_desc,
                     "quantity": qty,
                     "dimensions": dim,
                     "location": loc,
+                    "type": active_item_type,
+                }
+                if active_item_type == "profile":
+                    data["profiles"].append(entry)
+                else:
+                    data["hardware"].append(entry)
+
+        # --- SCENARIUSZ B: Kontynuacja (Kolejny wymiar tego samego elementu) ---
+        elif active_profile_code:
+            # Sprawdzamy, czy wiersz zawiera dane wymiarowe
+            qty, dim, loc = _extract_dims(r, col_idx)
+
+            # Walidacja: Wymiar musi zawierać cyfry (żeby nie wciągnąć opisu "SKRZYDLO...")
+            is_valid_dim = dim and any(c.isdigit() for c in dim)
+            # Walidacja: Ilość musi zawierać cyfry
+            is_valid_qty = qty and any(c.isdigit() for c in qty)
+
+            if is_valid_qty or is_valid_dim:
+                entry = {
+                    "code": active_profile_code,
+                    "desc": active_profile_desc,
+                    "quantity": qty,
+                    "dimensions": dim,
+                    "location": loc,
+                    "type": active_item_type,
                 }
 
-                if last_type == "profile":
-                    data["profiles"].append(new_entry)
-                else:
-                    data["hardware"].append(new_entry)
+                if active_item_type == "profile":
+                    data["profiles"].append(entry)
+                elif active_item_type == "hardware":
+                    data["hardware"].append(entry)
 
     return data
 
