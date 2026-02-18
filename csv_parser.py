@@ -366,21 +366,16 @@ def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
 def get_data_for_position(
     csv_path: str, position_number: str, vendor_profile, product_db=None
 ) -> dict:
-    """
-    Zaawansowany parser z obsługą wielowierszowych wymiarów i detekcją sekcji.
-    """
     rows = _read_csv_rows(csv_path)
     data = {"profiles": [], "hardware": []}
 
     target_pos = str(position_number).strip()
     is_target_pos = False
 
-    # Stan parsera
     active_profile_code = None
     active_profile_desc = ""
-    active_item_type = None  # 'profile' lub 'hardware'
+    active_item_type = None
 
-    # Indeksy kolumn
     col_idx = {"qty": None, "dim": None, "loc": None}
 
     for row in rows:
@@ -415,7 +410,7 @@ def get_data_for_position(
                     col_idx["loc"] = i
             continue
 
-        # 3. Wykrywanie NOWEGO KODU (Produkt lub Akcesorium)
+        # 3. Wykrywanie NOWEGO KODU
         new_code_found = None
         new_item_type = None
 
@@ -424,17 +419,12 @@ def get_data_for_position(
             if not cell:
                 continue
 
-            # A. Baza Wiedzy (ZM)
             if product_db and cell in product_db:
                 new_code_found = cell
-                new_item_type = product_db[cell]["type"]  # 'profile' lub 'hardware'
+                new_item_type = product_db[cell]["type"]
                 break
-
-            # B. Heurystyka (Regex) - żeby przerwać pętlę poprzedniego profilu
             elif "." in cell and len(cell) > 5 and any(c.isdigit() for c in cell):
                 new_code_found = cell
-                # Zgadujemy typ (domyślnie hardware, chyba że wygląda na profil)
-                # Ale dla Reynaers 008, 108, 408, 508 to zazwyczaj profile
                 if cell.startswith(("008", "030", "108", "408", "508")):
                     new_item_type = "profile"
                 else:
@@ -446,16 +436,22 @@ def get_data_for_position(
             active_profile_code = new_code_found
             active_item_type = new_item_type
 
-            # Opis
             if product_db and new_code_found in product_db:
                 active_profile_desc = product_db[new_code_found]["desc"]
             else:
-                active_profile_desc = ""  # Pusty, nie bierzemy śmieci z CSV
+                active_profile_desc = ""
 
-            # Dane z tego samego wiersza
             qty, dim, loc = _extract_dims(r, col_idx)
 
-            # Walidacja: Czy to faktycznie dane, czy nagłówek/śmieć?
+            # Walidacja wymiaru: Odrzucamy jeśli to Opis (np. zawiera dużo liter)
+            # Wymiar może mieć: cyfry, kropkę, przecinek, spację, 'm', 'x', '(', ')', ';', "'"
+            # Jeśli ma inne litery -> to opis.
+            if dim:
+                # Usuwamy dozwolone znaki, sprawdzamy czy zostały jakieś litery
+                stripped_dim = re.sub(r"[0-9.,\s()';:xXmM-]", "", dim)
+                if len(stripped_dim) > 1:  # Zostawiamy margines błędu 1 znak
+                    dim = ""  # To nie jest wymiar, to opis
+
             if qty or dim:
                 entry = {
                     "code": active_profile_code,
@@ -470,14 +466,18 @@ def get_data_for_position(
                 else:
                     data["hardware"].append(entry)
 
-        # --- SCENARIUSZ B: Kontynuacja (Kolejny wymiar tego samego elementu) ---
+        # --- SCENARIUSZ B: Kontynuacja ---
         elif active_profile_code:
-            # Sprawdzamy, czy wiersz zawiera dane wymiarowe
             qty, dim, loc = _extract_dims(r, col_idx)
 
-            # Walidacja: Wymiar musi zawierać cyfry (żeby nie wciągnąć opisu "SKRZYDLO...")
-            is_valid_dim = dim and any(c.isdigit() for c in dim)
-            # Walidacja: Ilość musi zawierać cyfry
+            # Ta sama rygorystyczna walidacja wymiaru
+            is_valid_dim = False
+            if dim:
+                stripped_dim = re.sub(r"[0-9.,\s()';:xXmM-]", "", dim)
+                # Jeśli po usunięciu cyfr i 'mm' zostały litery (np. PROFIL), to nie jest wymiar
+                if len(stripped_dim) < 2 and any(c.isdigit() for c in dim):
+                    is_valid_dim = True
+
             is_valid_qty = qty and any(c.isdigit() for c in qty)
 
             if is_valid_qty or is_valid_dim:
