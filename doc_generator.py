@@ -10,7 +10,6 @@ from jinja2 import Environment, FileSystemLoader
 from vendors import get_vendor_by_key
 from csv_parser import (
     get_positions_with_systems,
-    parse_hardware_from_csv,
     get_data_for_position,
 )
 from config import PROJECTS_IMAGES, BASE_PATH
@@ -228,33 +227,23 @@ def prepare_context(csv_file, zm_file, project_folder_name, vendor_key):
 
     vendor_cls = get_vendor_by_key(vendor_key)
 
-    # 1. Parsowanie Nazwy Projektu (Metadata)
+    # 1. Parsowanie Nazwy
     proj_info = _parse_project_name(project_folder_name)
 
-    # 2. Ścieżka do PDF (Puppeteer)
-    # Ścieżka: BASE_PATH/projects/{FOLDER}/{FOLDER}.pdf
+    # 2. Ścieżka PDF
     pdf_dir = os.path.join(BASE_PATH, "projects", project_folder_name)
     pdf_filename = f"{project_folder_name}.pdf"
-    # Puppeteer wymaga forward slashy w JSON/YAML
     pdf_output_path = os.path.join(pdf_dir, pdf_filename).replace("\\", "/")
 
-    # 3. Budowanie Bazy Wiedzy
+    # 3. Baza Wiedzy
     product_db = build_product_db(zm_file)
 
-    # 4. Dane z CSV (LP)
+    # 4. Dane z CSV (Pozycje)
     systems_map = get_positions_with_systems(csv_file)
-    # hardware_raw używamy teraz tylko globalnie, jeśli chcemy listę wszystkich okuć w projekcie
-    # Ale doc_generator pobiera okucia per pozycja w pętli niżej.
-    # Możemy pobrać globalne statystyki dla sekcji "Tabela Okuć i Akcesoriów" na początku dok.
-    # Używamy starego parsera hardware_raw (dla statystyk) lub iterujemy po product_db.
-    # Dla uproszczenia: zostawiamy starą metodę hardware_raw dla tabeli zbiorczej.
-    hardware_raw = parse_hardware_from_csv(csv_file, vendor_cls)
 
     timestamp = datetime.datetime.now().strftime("%d.%m.%Y")
 
-    # 5. Inicjalizacja kontekstu
     context = {
-        # Nagłówek
         "project_client": proj_info["client"],
         "project_number": proj_info["number"],
         "project_desc": proj_info["desc"],
@@ -264,7 +253,7 @@ def prepare_context(csv_file, zm_file, project_folder_name, vendor_key):
         "author": os.getlogin(),
         "systems": list(systems_map.keys()),
         "systems_data": {},
-        "global_hardware": [],
+        "global_hardware": [],  # Zostanie wypełnione dynamicznie
         "documents": [
             {
                 "name": "Lista produkcyjna",
@@ -276,63 +265,47 @@ def prepare_context(csv_file, zm_file, project_folder_name, vendor_key):
         "instructions": [],
     }
 
-    # Tabela zbiorcza okuć (Global)
-    for code, details in hardware_raw.items():
-        # Pobieramy opis z Bazy Wiedzy, jeśli dostępny
-        clean_code = code.replace(" ", "")
-        desc = (
-            product_db[clean_code]["desc"]
-            if (product_db and clean_code in product_db)
-            else details.get("desc", "")
-        )
-
-        img_path = f"../../images_db/{vendor_key}/hardware/{code}.jpg"
-
-        context["global_hardware"].append(
-            {
-                "code": code,
-                "desc": desc,
-                "image_path": img_path.replace(" ", "%20"),
-                "catalog_link": "#",
-                "status": "🟡 0/0",
-                "notes": "",
-            }
-        )
+    # Słownik pomocniczy do agregacji globalnych okuć (Kod -> Opis)
+    all_hardware_map = {}
 
     # Pętla po Systemach i Pozycjach
     for sys_name, positions in systems_map.items():
         system_entries = []
 
         for pos_num in positions:
-            # Moduły pomocnicze
+            # Rzuty
             view_path = _get_view_for_position(project_folder_name, pos_num)
 
-            # Profile (z użyciem DB)
+            # Profile (Już poprawnie pobierane z DB)
             profiles = _get_profiles_for_position(
                 csv_file, pos_num, vendor_key, vendor_cls, sys_name, product_db
             )
 
-            # Hardware (z użyciem DB i LP)
-            # Uwaga: _get_hardware_for_position korzystało ze starego hardware_raw.
-            # Powinniśmy użyć get_data_for_position (nowego parsera), żeby wziąć hardware przypisany do pozycji w CSV!
-            # To ważna zmiana spójności.
-
-            # Pobieramy WSZYSTKO (profile i hardware) z nowego parsera dla tej pozycji
+            # Pobieramy surowe dane dla pozycji (Profile + Hardware)
             pos_data_new = get_data_for_position(
                 csv_file, pos_num, vendor_cls, product_db
             )
 
-            # Przetwarzanie Hardware z nowego parsera (tak jak Profile)
+            # Przetwarzanie Hardware dla TEJ pozycji
             hardware_list = []
             for hw in pos_data_new["hardware"]:
-                safe_code = hw["code"].replace(" ", "%20")
-                checklist_id = f"{hw['code'].replace(' ', '_')}_{pos_num}"
+                code = hw["code"]
+                desc = hw["desc"]
+
+                # --- AGREGACJA GLOBALNA ---
+                # Zapisujemy każde unikalne okucie do mapy globalnej
+                if code not in all_hardware_map:
+                    all_hardware_map[code] = desc
+
+                # Przygotowanie do wyświetlenia w tabeli pozycji
+                safe_code = code.replace(" ", "%20")
+                checklist_id = f"{code.replace(' ', '_')}_{pos_num}"
 
                 hardware_list.append(
                     {
-                        "code": hw["code"],
-                        "desc": hw["desc"],
-                        "quantity": hw["quantity"],  # Teraz mamy ilość per pozycja!
+                        "code": code,
+                        "desc": desc,
+                        "quantity": hw["quantity"],
                         "image_path": f"../../images_db/{vendor_key}/hardware/{safe_code}.jpg",
                         "catalog_link": "#",
                         "checklist_id": checklist_id,
@@ -346,12 +319,26 @@ def prepare_context(csv_file, zm_file, project_folder_name, vendor_key):
                     "number": pos_num,
                     "view_image_path": view_path,
                     "profiles": profiles,
-                    "hardware": hardware_list,  # Używamy nowej listy z ilościami!
+                    "hardware": hardware_list,
                     "construction_notes": notes_placeholder,
                 }
             )
 
         context["systems_data"][sys_name] = system_entries
+
+    # Wypełnianie listy Global Hardware (dla tabeli na początku dokumentu)
+    for code, desc in sorted(all_hardware_map.items()):
+        img_path = f"../../images_db/{vendor_key}/hardware/{code}.jpg"
+        context["global_hardware"].append(
+            {
+                "code": code,
+                "desc": desc,
+                "image_path": img_path.replace(" ", "%20"),
+                "catalog_link": "#",
+                "status": "🟡 0/0",
+                "notes": "",
+            }
+        )
 
     return context
 
