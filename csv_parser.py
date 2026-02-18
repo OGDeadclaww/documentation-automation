@@ -363,122 +363,114 @@ def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
     return systems
 
 
-# csv_parser.py (dodaj to na końcu pliku)
+# csv_parser.py
 
 
 def get_data_for_position(csv_path: str, position_number: str, vendor_profile) -> dict:
     """
-    Wyciąga profile i przypisuje je do pozycji.
-    Filtruje akcesoria (np. 060...), które "podszywają się" pod profile,
-    sprawdzając czy wiersz zawiera wymiar (mm).
+    Wyciąga dane dla pozycji używając maszyny stanów (State Machine).
+    Rozróżnia sekcje: Profile, Profile dodatkowe vs Akcesoria, Okucia.
     """
     rows = _read_csv_rows(csv_path)
     data = {"profiles": [], "hardware": []}
 
-    is_target_pos = False
+    # Konwersja szukanej pozycji na string (np. "1")
+    target_pos = str(position_number).strip()
+
+    # Stany parsera
+    current_pos = None
+    current_section = None  # 'PROFILES', 'HARDWARE', lub None
+
+    # Słowa kluczowe rozpoczynające sekcje
+    SECTION_MAP = {
+        "Profile": "PROFILES",
+        "Profile dodatkowe": "PROFILES",
+        "Uszczelki": "HARDWARE",  # Traktujemy jako obróbki
+        "Akcesoria": "HARDWARE",
+        "Okucia": "HARDWARE",
+    }
 
     for row in rows:
         line = ";".join(row)
 
-        # Wykrywanie początku pozycji
+        # 1. Wykrywanie Pozycji (np. "... Poz. 1 ...")
         if "Poz." in line:
             m = POZ_LINE_RE.search(line)
             if m:
                 found_pos = m.group(1)
-                # Porównujemy jako stringi, żeby uniknąć błędów typów
-                is_target_pos = str(found_pos) == str(position_number)
+                current_pos = found_pos
+                current_section = None  # Reset sekcji przy nowej pozycji
             continue
 
-        if not is_target_pos:
+        # Jeśli nie jesteśmy w szukanej pozycji -> pomiń
+        if str(current_pos) != target_pos:
             continue
 
-        # Jesteśmy wewnątrz wybranej pozycji
+        # 2. Wykrywanie Sekcji
+        # Sprawdzamy pierwszą kolumnę (zazwyczaj tam są nagłówki sekcji)
+        if row and row[0]:
+            clean_header = clean(row[0])
+            if clean_header in SECTION_MAP:
+                current_section = SECTION_MAP[clean_header]
+                continue
+
+            # Ignoruj nagłówki tabeli
+            if "Kod:" in clean_header or "Rysunek" in clean_header:
+                continue
+
+        # 3. Parsowanie Danych (tylko jeśli jesteśmy w aktywnej sekcji)
+        if not current_section:
+            continue
+
+        # Czyścimy wiersz
         r = [clean(c) for c in row]
         if not any(r):
             continue
 
-        found_profile_in_row = False
+        # Kod jest zazwyczaj w kolumnie 0
+        code = r[0]
+        if not code or len(code) < 3:
+            continue  # Za krótkie na kod
 
-        # Sprawdzamy pierwsze 3 kolumny pod kątem kodu profilu
-        for i in range(min(len(r), 3)):
-            cell = r[i]
-            if not cell:
+        # Pobieramy opis (często wiersz niżej w CSV Reynaersa, ale tutaj upraszczamy:
+        # W Twoim pliku opis jest CZASEM w tym samym wierszu, a CZASEM pod spodem.
+        # Na razie weźmy prosty opis z kolumny 1 jeśli jest, lub pusty.
+        desc = (
+            ""  # TODO: Logika pobierania opisu z kolejnego wiersza (wymaga buforowania)
+        )
+
+        # Ilość i Wymiary
+        # W Twoim pliku: Kod (0) | Rysunek (1) | ... | Ilość (4) | Wymiary (5)
+        # Indeksy mogą się różnić w zależności od pustych kolumn.
+        # Szukamy kolumny z "szt" lub "m"
+        qty = "1"
+        dims = ""
+
+        for col in r:
+            val = col.lower()
+            if "szt" in val or " m" in val:  # Ilość (np. "1 szt", "0,24 m")
+                qty = col
+            elif "mm" in val or "('" in val:  # Wymiar
+                dims = col
+
+        # Dodajemy do odpowiedniej listy
+        entry = {
+            "code": code,
+            "desc": desc,
+            "quantity": qty,
+            "dimensions": dims,
+            "location": "—",
+        }
+
+        if current_section == "PROFILES":
+            # Dodatkowe zabezpieczenie: czy to na pewno profil?
+            # Kod profilu Reynaersa ma kropki (np. 108.0081...)
+            if vendor_profile.KEY == "reynaers" and "." not in code:
                 continue
+            data["profiles"].append(entry)
 
-            prof_code = vendor_profile.parse_profile_code(cell)
-
-            if prof_code and len(prof_code) > 4:
-                # --- NOWOŚĆ: Blacklista kodów Reynaers ---
-                # Jeśli kod zaczyna się od znanych prefiksów akcesoriów, to NIE JEST profil.
-                if prof_code.startswith(
-                    (
-                        "060.",
-                        "061.",
-                        "062.",
-                        "063.",
-                        "064.",
-                        "065.",
-                        "066.",
-                        "067.",
-                        "068.",
-                        "069.",
-                        "160.",
-                        "161.",
-                        "162.",
-                        "163.",
-                        "164.",
-                        "165.",
-                        "166.",
-                        "167.",
-                        "168.",
-                        "169.",
-                    )
-                ):
-                    continue  # To na pewno akcesorium/okucie, pomiń jako profil
-
-                has_dimension = False
-                qty = "1"
-                dims = ""
-
-                # Skanujemy resztę wiersza
-                for j in range(i + 1, min(len(r), i + 6)):
-                    val = r[j].lower()
-
-                    # Ilość (np. "2 szt", "4")
-                    if "szt" in val or (val.isdigit() and len(val) < 3):
-                        if not qty or qty == "1":
-                            qty = r[j]
-
-                    # Wymiar (np. "2450 mm", "514,0")
-                    # Kryterium: zawiera "mm" LUB (jest liczbą i ma > 3 znaki) LUB (ma przecinek i cyfry)
-                    if (
-                        "mm" in val
-                        or (val.replace(".", "").isdigit() and len(val) > 2)
-                        or ("," in val and any(char.isdigit() for char in val))
-                    ):
-                        dims = r[j]
-                        has_dimension = True
-
-                # KLUCZOWY FILTR:
-                # Jeśli znaleźliśmy wymiar (długość cięcia) -> To jest PROFIL.
-                # Jeśli nie ma wymiaru (tylko sztuki) -> To jest AKCESORIUM (ignorujemy w tej tabeli).
-                if has_dimension:
-                    desc_idx = i + 1
-                    desc = r[desc_idx] if len(r) > desc_idx else "Profil"
-
-                    data["profiles"].append(
-                        {
-                            "code": prof_code,
-                            "desc": desc,
-                            "quantity": qty,
-                            "dimensions": dims,
-                            "location": "—",
-                        }
-                    )
-                    found_profile_in_row = True
-                    break  # Znaleziono profil w tym wierszu, koniec szukania w kolumnach
-
-        if found_profile_in_row:
-            continue
+        elif current_section == "HARDWARE":
+            # Tu trafiają Uszczelki, Akcesoria, Okucia
+            data["hardware"].append(entry)
 
     return data
