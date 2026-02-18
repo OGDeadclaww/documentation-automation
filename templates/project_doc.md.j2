@@ -28,7 +28,7 @@ puppeteer:
 
 <div style="text-align: center">
 
-# {{ project_name }} <br><span style="color:red">{{ project_id }}</span>
+# {{ project_client }} <br> <span style="color:red">{{ project_number }}</span> <br> {{ project_desc }}
 
 </div>
 
@@ -151,10 +151,10 @@ puppeteer:
 
 [⬆️ Spis Treści](#spis-treści)
 
-| Kod + Opis | Rysunek | Ilość | Katalog | UWAGI |
-| :-: | :-: | :-: | :-: | :-: |
+| Kod | Opis | Rysunek | Ilość | Katalog | UWAGI |
+| :--: | :-- | :--: | :--: | :--: | :-- |
 {% for hw in pos.hardware -%}
-| `{{ hw.code }}` <br> {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [Strona z Katalogu 👈]({{ hw.catalog_link }}) | [Checklista](#checklist-{{ hw.code }}-{{ pos.number }}) |
+| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | [Checklista](#checklist-{{ hw.checklist_id }}) |
 {% endfor %}
 
 ---
@@ -163,10 +163,10 @@ puppeteer:
 
 [⬆️ Spis Treści](#spis-treści)
 
-| ✓ | Kod | Ilość | Opis | Katalog |
+| ✓ | Kod | Opis | Ilość | Katalog |
 | :--: | :--: | :--: | :-- | :--: |
 {% for hw in pos.hardware -%}
-| <input type="checkbox"> | `{{ hw.code }}` | {{ hw.quantity }} | {{ hw.desc }} | [📄](#checklist-{{ hw.code }}-{{ pos.number }}) |
+| <input type="checkbox"> | `{{ hw.code }}` | {{ hw.desc }} | {{ hw.quantity }} | [📄 Otwórz](#checklist-{{ hw.code }}-{{ pos.number }}) |
 {% endfor %}
 
 ---
