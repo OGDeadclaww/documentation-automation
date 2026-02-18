@@ -1,6 +1,7 @@
 # doc_generator.py
 import re
 import os
+import json
 import glob
 import datetime
 from jinja2 import Environment, FileSystemLoader
@@ -352,6 +353,57 @@ def prepare_context(csv_file, zm_file, project_folder_name, vendor_key):
         context["systems_data"][sys_name] = system_entries
 
     return context
+
+
+def _update_project_index(context):
+    index_path = os.path.join(BASE_PATH, "projects", "project_index.json")
+
+    if os.path.exists(index_path):
+        try:
+            with open(index_path, "r", encoding="utf-8") as f:
+                index = json.load(f)
+        except json.JSONDecodeError:
+            index = {}
+    else:
+        index = {}
+
+    proj_num = context["project_number"] or "UNKNOWN"
+
+    # 1. Zbieramy Okucia (z listy globalnej)
+    hardware_used = set()
+    for hw in context["global_hardware"]:
+        hardware_used.add(hw["code"])
+
+    # 2. Zbieramy Profile (musimy przejść przez systemy i pozycje)
+    profiles_used = set()
+    for sys_name, positions in context["systems_data"].items():
+        for pos in positions:
+            for prof in pos["profiles"]:
+                # Używamy kodu "display" (z XX), bo jest bardziej generyczny
+                profiles_used.add(prof["code"])
+
+    entry = {
+        "date": context["generation_date"],
+        "client": context["project_client"],
+        "desc": context["project_desc"],
+        "folder": os.path.basename(os.path.dirname(context["pdf_output_path"])),
+        "systems": context["systems"],
+        "stats": {
+            "hardware_count": len(hardware_used),
+            "profiles_count": len(profiles_used),
+        },
+        "hardware_codes": sorted(list(hardware_used)),
+        "profile_codes": sorted(list(profiles_used)),  # <--- NOWOŚĆ
+    }
+
+    index[proj_num] = entry
+
+    try:
+        with open(index_path, "w", encoding="utf-8") as f:
+            json.dump(index, f, indent=2, ensure_ascii=False)
+        print(f"💾 Zaktualizowano indeks projektów: {index_path}")
+    except Exception as e:
+        print(f"⚠️ Nie udało się zapisać indeksu: {e}")
 
 
 if __name__ == "__main__":
