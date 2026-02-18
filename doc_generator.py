@@ -41,6 +41,7 @@ def render_markdown(context, output_filename="Dokumentacja.md"):
         f.write(rendered)
 
     print(f"✅ Wygenerowano dokumentację: {os.path.abspath(out_path)}")
+    _update_project_index(context)
 
 
 # ==========================================
