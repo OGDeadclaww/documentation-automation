@@ -1,15 +1,12 @@
 # csv_parser.py
-"""
-Parsowanie plików CSV z danymi projektowymi.
-Wyciąga pozycje, system, kolory, okucia i profile dodatkowe.
-"""
 import re
 import csv
-
-from config import POZ_LINE_RE
 from vendors import clean
 
-POZ_LINE_RE_REYNAERS = re.compile(r"Poz\.\s*(\d+)")
+# Zaimportuj normalize_key z db_builder, aby logika była spójna
+from db_builder import normalize_key
+
+POZ_LINE_RE = re.compile(r"Poz\.\s*(\d+)")
 SYSTEM_KEYWORDS = ["MB-", "MasterLine", "CS-", "CP-", "SlimLine", "Hi-Finity"]
 
 # ============================================
@@ -18,7 +15,6 @@ SYSTEM_KEYWORDS = ["MB-", "MasterLine", "CS-", "CP-", "SlimLine", "Hi-Finity"]
 
 
 def _read_csv_rows(csv_path: str) -> list:
-    """Wczytuje CSV z automatycznym wykrywaniem kodowania."""
     for encoding in ("cp1250", "utf-8"):
         try:
             with open(csv_path, "r", encoding=encoding, errors="replace") as f:
@@ -28,16 +24,7 @@ def _read_csv_rows(csv_path: str) -> list:
     raise IOError(f"Nie można odczytać pliku: {csv_path}")
 
 
-# ============================================
-# PARSOWANIE POZYCJI (PROFILE / HARDWARE)
-# ============================================
-
-
 def _extract_dims(row, idx_map):
-    """
-    Wyciąga Ilość, Wymiar i Lokalizację z wiersza.
-    Używa mapy indeksów (jeśli dostępna), z fallbackiem na heurystykę.
-    """
     qty = (
         row[idx_map["qty"]]
         if idx_map["qty"] is not None and idx_map["qty"] < len(row)
@@ -54,17 +41,12 @@ def _extract_dims(row, idx_map):
         else ""
     )
 
-    # --- WALIDACJA WSTĘPNA ---
-    # Jeśli pobrany 'dim' nie ma cyfr, to na pewno śmieć/opis
     if dim and not any(c.isdigit() for c in dim):
         dim = ""
     if qty and not any(c.isdigit() for c in qty):
         qty = ""
 
-    # --- HEURYSTYKA (Gdy indeksy zawiodą lub są puste) ---
-
     if not qty:
-        # Szukamy ilości: zawiera "szt"
         for val in row:
             v = val.lower()
             if "szt" in v:
@@ -72,17 +54,12 @@ def _extract_dims(row, idx_map):
                 break
 
     if not dim:
-        # Szukamy wymiaru: zawiera "mm" lub nawiasy wymiarowe, i nie jest ilością
         for val in row:
             v = val.lower()
             if v == qty.lower():
                 continue
-
-            # Musi mieć cyfrę
             if not any(c.isdigit() for c in v):
                 continue
-
-            # Kryteria wymiaru
             if (
                 "mm" in v
                 or (v.replace(".", "").isdigit() and len(v) > 3)
@@ -92,6 +69,11 @@ def _extract_dims(row, idx_map):
                 break
 
     return qty, dim, loc
+
+
+# ============================================
+# GŁÓWNY PARSER DANYCH POZYCJI
+# ============================================
 
 
 def get_data_for_position(
@@ -142,29 +124,26 @@ def get_data_for_position(
             cell = r[i].strip()
             if not cell:
                 continue
-
-            # --- FILTR 1: Musi mieć cyfrę ---
             if not any(c.isdigit() for c in cell):
                 continue
-
-            # --- FILTR 2: Nie może być długim opisem (ALE uwaga na Bicolor!) ---
             if len(cell) > 20 and " " in cell:
-                # Jeśli zawiera polskie znaki -> Opis
                 if any(c in "ąęśżźćńółĄĘŚŻŹĆŃÓŁ" for c in cell):
                     continue
-                # Jeśli zaczyna się od "1)" -> Opis
                 if ")" in cell[:3]:
                     continue
-                # Jeśli nie ma kropki w pierwszych 10 znakach (format XXX.XXXX) -> Opis
                 if "." not in cell[:10]:
                     continue
 
-            # --- FILTR 3: Baza lub Struktura ---
-            if product_db and cell in product_db:
-                new_code = cell
+            # --- NORMALIZACJA KLUCZA ---
+            clean_key = normalize_key(cell)
+
+            # A. Baza Wiedzy (szukamy po czystym kluczu)
+            if product_db and clean_key in product_db:
+                new_code = cell  # Zachowujemy oryginał z LP do wyświetlania
                 break
+
+            # B. Heurystyka (Regex)
             elif "." in cell and len(cell) > 5:
-                # Dodatkowe sprawdzenie struktury (musi mieć kropkę po 3 znakach np. 108.)
                 if cell[3] == ".":
                     new_code = cell
                     break
@@ -172,10 +151,12 @@ def get_data_for_position(
         # --- A: Nowy Element ---
         if new_code:
             active_profile_code = new_code
+            clean_key = normalize_key(new_code)
 
-            if product_db and new_code in product_db:
-                active_item_type = product_db[new_code]["type"]
-                active_profile_desc = product_db[new_code]["desc"]
+            # Pobieranie typu i opisu z bazy
+            if product_db and clean_key in product_db:
+                active_item_type = product_db[clean_key]["type"]
+                active_profile_desc = product_db[clean_key]["desc"]
             else:
                 if new_code.startswith(("008", "030", "108", "408", "508")):
                     active_item_type = "profile"
@@ -240,10 +221,8 @@ def get_data_for_position(
 
 
 # ============================================
-# STARE FUNKCJE (Dla kompatybilności wstecznej)
+# STARE FUNKCJE (bez zmian, tylko lista)
 # ============================================
-
-
 def get_positions_from_csv(csv_path: str) -> list:
     rows = _read_csv_rows(csv_path)
     positions = []
@@ -291,52 +270,16 @@ def _detect_system_in_line(line: str) -> str:
 
 
 def extract_system_from_csv(csv_path: str) -> str:
-    # (Zachowana stara logika, jeśli potrzebna)
     return None
 
 
 def extract_color_codes_from_csv(csv_path: str) -> list:
-    rows = _read_csv_rows(csv_path)
-    colors = []
-    for row in rows:
-        if not any("Kolor profili:" in str(cell) for cell in row):
-            continue
-        for cell in row:
-            if not cell or "Kolor profili:" in cell:
-                continue
-            # Prosta ekstrakcja (uproszczona dla czytelności)
-            # W pełnej wersji tu była logika regexów
-            pass
-    return colors
+    return []  # Uproszczone
 
 
 def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
-    """
-    Stary parser globalny (hardware_raw).
-    Może być nadal używany przez rename_images, ale doc_generator
-    teraz używa get_data_for_position.
-    """
-    rows = _read_csv_rows(csv_path)
-    hardware_codes = {}
-    current_pos = None
-
-    for row in rows:
-        line = ";".join(row)
-        mpos = POZ_LINE_RE.search(line)
-        if mpos and any(kw in line for kw in SYSTEM_KEYWORDS):
-            current_pos = mpos.group(1)
-            continue
-
-        if not current_pos:
-            continue
-
-        # Prosta logika dla hardware (stara)
-        # ... (Tu była stara pętla)
-        # Skróciłem dla przejrzystości, bo doc_generator teraz używa nowej funkcji.
-
-    return hardware_codes  # Zwraca pusty lub stary wynik
+    return {}  # Uproszczone, nieużywane w nowym generatorze
 
 
 def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
-    # Zachowane dla rename_images.py
-    return {}
+    return {}  # Zachowane
