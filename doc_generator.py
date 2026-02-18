@@ -88,37 +88,41 @@ def _normalize_reynaers_code(code):
     return code
 
 
-# Zaktualizowana funkcja _get_profiles_for_position
 def _get_profiles_for_position(
     csv_path, pos_num, vendor_key, vendor_cls, sys_name, product_db
 ):
+    """
+    Pobiera profile, grupuje je i normalizuje kody (XX) używając parsera dostawcy.
+    """
     raw_data = get_data_for_position(csv_path, pos_num, vendor_cls, product_db)
 
     # GRUPOWANIE (Agregacja)
-    # Słownik: Kod -> {desc, qtys: [], dims: [], locs: [], image: ...}
+    # Słownik: ZnormalizowanyKod -> {desc, qtys: [], dims: [], locs: [], image: ...}
     grouped = {}
 
     for prof in raw_data["profiles"]:
-        code = prof["code"]
+        raw_code = prof["code"]  # Kod z CSV (np. "108.0081.59 7021-2")
 
-        if code not in grouped:
+        # Używamy vendor_cls do normalizacji (np. zamiana koloru na XX, zachowanie 17)
+        normalized_code = vendor_cls.parse_profile_code(raw_code)
+        # Fallback jeśli parser nic nie zwrócił
+        display_code = normalized_code if normalized_code else raw_code
+
+        if display_code not in grouped:
             # Ustalanie ścieżki obrazka
-            img_filename = code
             if vendor_key == "reynaers":
-                # Używamy znormalizowanego kodu z .XX
-                normalized_code = _normalize_reynaers_code(code)
-                img_filename = f"{normalized_code}.jpg"
                 sys_folder = sys_name.lower()
+                img_filename = f"{display_code}.jpg"
             else:
                 sys_folder = sys_name.lower().replace(" ", "")
-                img_filename = f"{code}.jpg"
+                img_filename = f"{display_code}.jpg"
 
             img_path = (
                 f"../../images_db/{vendor_key}/profiles/{sys_folder}/{img_filename}"
             )
 
-            grouped[code] = {
-                "code": code,
+            grouped[display_code] = {
+                "code": display_code,
                 "desc": prof["desc"],
                 "image_path": img_path.replace(" ", "%20"),
                 "quantities": [],
@@ -126,15 +130,15 @@ def _get_profiles_for_position(
                 "locations": [],
             }
 
-        # Dodajemy dane do list (jeśli nie puste)
+        # Dodajemy dane do list
         if prof["quantity"]:
-            grouped[code]["quantities"].append(prof["quantity"])
+            grouped[display_code]["quantities"].append(prof["quantity"])
         if prof["dimensions"]:
-            grouped[code]["dimensions"].append(prof["dimensions"])
+            grouped[display_code]["dimensions"].append(prof["dimensions"])
         if prof["location"] and prof["location"] != "—":
-            grouped[code]["locations"].append(prof["location"])
+            grouped[display_code]["locations"].append(prof["location"])
 
-    # Konwersja na listę dla Jinja2 (z <br>)
+    # Konwersja na listę dla Jinja2
     processed_profiles = []
     for code, data in grouped.items():
         processed_profiles.append(
@@ -146,7 +150,7 @@ def _get_profiles_for_position(
                 "dimensions": "<br>".join(data["dimensions"]),
                 "location": (
                     "<br>".join(set(data["locations"])) if data["locations"] else "—"
-                ),  # Set dla unikalnych lokalizacji
+                ),
             }
         )
 
