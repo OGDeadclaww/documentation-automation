@@ -107,37 +107,31 @@ def _local_to_relative(
     return _url_encode(local_norm)
 
 
-def _local_to_network_relative(
-    local_path: str,
-) -> str:
+def _local_to_network_relative(local_path: str) -> str:
     """
     Zamienia ścieżkę lokalną (C:/Users/pawel/Desktop/Zlecenia/...)
-    na sieciową relatywną (../../../Zlecenia/...).
+    na sieciową RELATYWNĄ (../../../Zlecenia/...).
 
-    Logika identyczna jak _local_to_relative ale używa głębokości
-    wynikającej z miejsca pliku MD.
+    Logika:
+    - Zamiast bezwzględnej C: pobieramy suffix od "Zlecenia/"
+    - Prefix RELATIVE_DEPTH_TO_BASE + /Zlecenia/ + suffix
+
+    Przykład:
+      C:/Users/pawel/Desktop/Zlecenia/Lukasz_K/Belgia/P220667/LP.pdf
+      → ../../../Zlecenia/Lukasz_K/Belgia/P220667/LP.pdf
     """
-    return _local_to_relative(local_path, "")
+    # Normalizuj separatory
+    local_norm = local_path.replace("\\", "/")
+    zlecenia_local_norm = ZLECENIA_LOCAL.replace("\\", "/")
 
+    if local_norm.lower().startswith(zlecenia_local_norm.lower()):
+        # suffix = Lukasz_K/Belgia/P220667/LP.pdf
+        suffix = local_norm[len(zlecenia_local_norm) :].lstrip("/")
+        rel = f"{RELATIVE_DEPTH_TO_BASE}/Zlecenia/{suffix}"
+        return _url_encode(rel)
 
-def _build_job_links() -> tuple[str, str]:
-    """
-    Zwraca tuple (link_lokalny, link_sieciowy) dla folderu JOB.
-    Oba kończą się na nazwie folderu Lotti/ (bez konkretnego pliku).
-    """
-    local_norm = JOB_PATH_LOCAL.replace("\\", "/")
-    # network_norm = JOB_PATH_NETWORK.replace("\\", "/")
-
-    # Sieciowy relatywny: JOB jest w Z:\ więc
-    # Z:\Pawel_Pisarski\Dokumentacja\projects\FOLDER\Dokumentacja.md
-    # ../../.. = Pawel_Pisarski, ale JOB jest w Z:\ nie w Pawel_Pisarski
-    # więc ../../../../JOB/Lotti/
-    job_network_rel = "../../../../JOB/Lotti/"
-
-    local_link = _url_encode(f"{local_norm}/")
-    network_link = _url_encode(job_network_rel)
-
-    return local_link, network_link
+    # Fallback: URL-encoded bezwzględna ścieżka lokalna
+    return _url_encode(local_norm)
 
 
 # ==========================================
@@ -145,103 +139,27 @@ def _build_job_links() -> tuple[str, str]:
 # ==========================================
 
 
-def _scan_project_documents(doc_folder: str) -> list[dict]:
-    """
-    Skanuje folder projektu w poszukiwaniu dokumentów:
-      - PDF z prefixem: LP, LC, Rys, RK
-      - Pliki: .dwg, .met, .rey, .ali
-
-    Zwraca listę słowników gotowych dla kontekstu Jinja2.
-    Nie zwraca plików JOB — te są generowane osobno.
-    """
-    if not doc_folder or not os.path.isdir(doc_folder):
-        return []
-
-    found = []
-    seen_labels = set()  # zapobiega duplikatom tego samego typu
-
-    try:
-        entries = os.listdir(doc_folder)
-    except PermissionError:
-        print(f"⚠️ Brak dostępu do folderu: {doc_folder}")
-        return []
-
-    for filename in sorted(entries):
-        filepath = os.path.join(doc_folder, filename)
-
-        if not os.path.isfile(filepath):
-            continue
-
-        name_lower = filename.lower()
-        ext = os.path.splitext(filename)[1].lower()
-        name_no_ext = os.path.splitext(filename)[0]
-
-        label = None
-        matched = False
-
-        # --- Sprawdź rozszerzenia binarne (.dwg, .met, .rey, .ali) ---
-        if ext in DOC_EXTENSIONS:
-            label = DOC_EXTENSIONS[ext]
-            matched = True
-
-        # --- Sprawdź prefixy PDF ---
-        elif ext == ".pdf":
-            for prefix, meta in DOC_PATTERNS.items():
-                # Akceptujemy: LP_, LP-, LP (spacja), Lista produkcyjna, Lista cięcia
-                if name_no_ext.upper().startswith(
-                    prefix.upper()
-                ) or name_lower.startswith(
-                    meta["label"].lower().split()[0]  # "lista", "rysunek"
-                ):
-                    label = meta["label"]
-                    matched = True
-                    break
-
-        if not matched:
-            continue
-
-        # Unikamy duplikatów (np. dwa pliki LP_)
-        label_key = label
-        if label_key in seen_labels:
-            # Dodaj numer jeśli duplikat
-            count = sum(1 for s in seen_labels if s.startswith(label_key))
-            label = f"{label} ({count + 1})"
-        seen_labels.add(label_key)
-
-        date_str = _file_date(filepath)
-        rel_link = _local_to_relative(filepath, "")
-
-        found.append(
-            {
-                "name": label,
-                "date": date_str,
-                "path": rel_link,
-                "local": True,
-            }
-        )
-
-    return found
-
-
 def _select_designer_and_find_project(project_number: str) -> str | None:
     """
     Flow:
       1. Odczytuje podfoldery ZLECENIA_LOCAL → lista projektantów
-      2. Użytkownik wybiera projektanta z okna dialogowego (select_folder w folderze Zlecenia)
+      2. Użytkownik wybiera projektanta z okna dialogowego (z scrollbarem)
       3. W folderze projektanta szuka podfolderu pasującego do numeru projektu
       4. Jeśli znajdzie → zwraca pełną ścieżkę
       5. Jeśli nie → manual select_folder
     """
     import tkinter as tk
-    from tkinter import simpledialog
+    from tkinter import Listbox, Scrollbar, SINGLE
 
     # Odczytaj projektantów
     try:
-        designers = [
-            d
-            for d in os.listdir(ZLECENIA_LOCAL)
-            if os.path.isdir(os.path.join(ZLECENIA_LOCAL, d))
-        ]
+        designers = sorted(
+            [
+                d
+                for d in os.listdir(ZLECENIA_LOCAL)
+                if os.path.isdir(os.path.join(ZLECENIA_LOCAL, d))
+            ]
+        )
     except Exception as e:
         print(f"⚠️ Nie można odczytać {ZLECENIA_LOCAL}: {e}")
         return select_folder("Wybierz folder z dokumentacją projektu")
@@ -249,41 +167,71 @@ def _select_designer_and_find_project(project_number: str) -> str | None:
     if not designers:
         return select_folder("Wybierz folder z dokumentacją projektu")
 
-    # Okno wyboru projektanta
+    # Okno z Listbox (scrollable + clickable)
     root = tk.Tk()
-    root.withdraw()
+    root.title("Wybór projektanta")
+    root.geometry("400x300")
     root.attributes("-topmost", True)
 
-    designer = simpledialog.askstring(
-        "Wybierz projektanta",
-        f"Projektanci ({ZLECENIA_LOCAL}):\n\n"
-        + "\n".join(f"  {i+1}. {d}" for i, d in enumerate(designers))
-        + "\n\nWpisz nazwę projektanta (lub zostaw puste = wybierz manualnie):",
-        parent=root,
+    label = tk.Label(
+        root,
+        text=f"Wybierz projektanta ({ZLECENIA_LOCAL}):",
+        wraplength=380,
+        justify=tk.LEFT,
     )
-    root.destroy()
+    label.pack(pady=10, padx=10)
 
-    if not designer:
+    # Frame dla Listbox + Scrollbar
+    frame = tk.Frame(root)
+    frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    scrollbar = Scrollbar(frame)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    listbox = Listbox(
+        frame,
+        yscrollcommand=scrollbar.set,
+        height=10,
+        width=50,
+        selectmode=SINGLE,
+        font=("Arial", 10),
+    )
+    listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    scrollbar.config(command=listbox.yview)
+
+    # Dodaj projektantów do Listbox
+    for designer in designers:
+        listbox.insert(tk.END, designer)
+
+    selected_designer = None
+
+    def on_select():
+        nonlocal selected_designer
+        selection = listbox.curselection()
+        if selection:
+            selected_designer = designers[selection[0]]
+            root.destroy()
+
+    def on_cancel():
+        root.destroy()
+
+    # Przyciski
+    button_frame = tk.Frame(root)
+    button_frame.pack(pady=10)
+
+    ok_btn = tk.Button(button_frame, text="OK", command=on_select, width=10)
+    ok_btn.pack(side=tk.LEFT, padx=5)
+
+    cancel_btn = tk.Button(button_frame, text="Anuluj", command=on_cancel, width=10)
+    cancel_btn.pack(side=tk.LEFT, padx=5)
+
+    root.mainloop()
+
+    if not selected_designer:
         return select_folder("Wybierz folder z dokumentacją projektu")
 
-    # Znajdź pasujący folder projektanta (case-insensitive)
-    designer_match = next(
-        (d for d in designers if d.lower() == designer.strip().lower()),
-        None,
-    )
-    if not designer_match:
-        # Spróbuj częściowe dopasowanie
-        designer_match = next(
-            (d for d in designers if designer.strip().lower() in d.lower()),
-            None,
-        )
-
-    if not designer_match:
-        print(f"⚠️ Nie znaleziono projektanta: {designer}")
-        return select_folder("Wybierz folder z dokumentacją projektu")
-
-    designer_path = os.path.join(ZLECENIA_LOCAL, designer_match)
-    print(f"📁 Projektant: {designer_match}")
+    designer_path = os.path.join(ZLECENIA_LOCAL, selected_designer)
+    print(f"📁 Projektant: {selected_designer}")
 
     # Szukaj folderu projektu rekurencyjnie (max 2 poziomy)
     candidates = _find_project_folder(designer_path, project_number, max_depth=2)
@@ -293,24 +241,72 @@ def _select_designer_and_find_project(project_number: str) -> str | None:
         return candidates[0]
 
     elif len(candidates) > 1:
-        # Kilka pasujących — zapytaj
+        # Kilka pasujących — zapytaj z Listbox
         root2 = tk.Tk()
-        root2.withdraw()
+        root2.title("Wybór folderu projektu")
+        root2.geometry("500x300")
         root2.attributes("-topmost", True)
 
-        choice = simpledialog.askstring(
-            "Wybierz folder projektu",
-            f"Znaleziono kilka folderów dla {project_number}:\n\n"
-            + "\n".join(f"  {i+1}. {c}" for i, c in enumerate(candidates))
-            + "\n\nWpisz numer:",
-            parent=root2,
+        label2 = tk.Label(
+            root2,
+            text=f"Znaleziono kilka folderów dla {project_number}.\nWybierz właściwy:",
+            wraplength=480,
+            justify=tk.LEFT,
         )
-        root2.destroy()
+        label2.pack(pady=10, padx=10)
 
-        try:
-            idx = int(choice.strip()) - 1
-            return candidates[idx]
-        except Exception:
+        frame2 = tk.Frame(root2)
+        frame2.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        scrollbar2 = Scrollbar(frame2)
+        scrollbar2.pack(side=tk.RIGHT, fill=tk.Y)
+
+        listbox2 = Listbox(
+            frame2,
+            yscrollcommand=scrollbar2.set,
+            height=10,
+            width=60,
+            selectmode=SINGLE,
+            font=("Arial", 9),
+        )
+        listbox2.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar2.config(command=listbox2.yview)
+
+        for i, cand in enumerate(candidates):
+            # Pokaż tylko basename dla czytelności
+            display = os.path.basename(cand)
+            listbox2.insert(tk.END, display)
+            # Store full path jako tag
+            listbox2.itemconfig(i, {"bg": "white"})
+
+        selected_path = None
+
+        def on_select2():
+            nonlocal selected_path
+            selection = listbox2.curselection()
+            if selection:
+                selected_path = candidates[selection[0]]
+                root2.destroy()
+
+        def on_cancel2():
+            root2.destroy()
+
+        button_frame2 = tk.Frame(root2)
+        button_frame2.pack(pady=10)
+
+        ok_btn2 = tk.Button(button_frame2, text="OK", command=on_select2, width=10)
+        ok_btn2.pack(side=tk.LEFT, padx=5)
+
+        cancel_btn2 = tk.Button(
+            button_frame2, text="Anuluj", command=on_cancel2, width=10
+        )
+        cancel_btn2.pack(side=tk.LEFT, padx=5)
+
+        root2.mainloop()
+
+        if selected_path:
+            return selected_path
+        else:
             return select_folder("Wybierz folder z dokumentacją projektu")
 
     else:
@@ -350,20 +346,29 @@ def _find_project_folder(
 # ==========================================
 
 
+def _get_catalog_status(date_obj: datetime.datetime) -> tuple[str, str]:
+    """
+    Zwraca (status_icon, status_text) na podstawie różnicy dat.
+
+    - Do 3 miesięcy:   🟢 Aktualny
+    - 3-6 miesięcy:    🟡 Do weryfikacji
+    - Powyżej 6 mcy:   🔴 Nieaktualny
+    """
+    now = datetime.datetime.now()
+    delta_days = (now - date_obj).days
+
+    if delta_days <= 90:  # ~3 miesiące
+        return "🟢", "Aktualny"
+    elif delta_days <= 180:  # ~6 miesięcy
+        return "🟡", "Do weryfikacji"
+    else:
+        return "🔴", "Nieaktualny"
+
+
 def _find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
     """
     Szuka katalogu systemowego PDF dla danego dostawcy i systemu.
-
-    Konwencja nazwy pliku:
-      {sys_name_lower}_{DD.MM.YYYY}.pdf
-      Przykład: mb-77hs_23.01.2026.pdf
-
-    Jeśli jest kilka wersji → bierze najnowszy wg daty w nazwie,
-    fallback: data modyfikacji pliku.
-
-    Zwraca słownik:
-      {"name": str, "path": str, "date": str, "status_icon": str, "status_text": str}
-    lub None jeśli nie znaleziono.
+    Status zależy od świeżości (3msc/6msc).
     """
     vendor_folder = VENDOR_CATALOG_FOLDERS.get(vendor_key)
     if not vendor_folder:
@@ -407,10 +412,10 @@ def _find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
     date_obj = _extract_date(best)
     date_str = date_obj.strftime("%d.%m.%Y")
 
+    # Status zależy od świeżości
+    status_icon, status_text = _get_catalog_status(date_obj)
+
     # Relatywna ścieżka do katalogu
-    # MD jest w: Z:\Pawel_Pisarski\Dokumentacja\projects\FOLDER\Dokumentacja.md
-    # Katalogi są w: Z:\Pawel_Pisarski\Katalogi\...
-    # ../../../Katalogi/Reynaers/mb-77hs_23.01.2026.pdf
     best_norm = best.replace("\\", "/")
     catalogs_norm = CATALOGS_PATH.replace("\\", "/")
 
@@ -424,8 +429,8 @@ def _find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
         "name": sys_name.upper(),
         "date": date_str,
         "path": rel_path,
-        "status_icon": "🟡",
-        "status_text": "Do weryfikacji",
+        "status_icon": status_icon,
+        "status_text": status_text,
     }
 
 
@@ -560,9 +565,9 @@ def _get_view_for_position(project_name, pos_num):
         full_path = found_files[0]
         filename = os.path.basename(full_path)
         safe_project_name = project_name.replace(" ", "%20")
-        return f"{RELATIVE_DEPTH_TO_BASE}/projects_images/{safe_project_name}/views/{filename}"
+        return f"../../projects_images/{safe_project_name}/views/{filename}"
 
-    return f"{RELATIVE_DEPTH_TO_BASE}/logo.png"
+    return "../../logo.png"  # Placeholder jeśli brak rzutu
 
 
 def _parse_project_name(folder_name):
@@ -598,8 +603,7 @@ def _get_profiles_for_position(
             sys_folder = sys_name.upper()
             img_filename = f"{display_code}.jpg"
             img_path = (
-                f"{RELATIVE_DEPTH_TO_BASE}/images_db"
-                f"/{vendor_key}/profiles/{sys_folder}/{img_filename}"
+                f"../../images_db/{vendor_key}/profiles/{sys_folder}/{img_filename}"
             )
 
             grouped[display_code] = {
@@ -656,7 +660,6 @@ def prepare_context(
     vendor_cls = get_vendor_by_key(vendor_key)
     proj_info = _parse_project_name(project_folder_name)
 
-    # Ścieżka wyjściowa PDF (Puppeteer)
     proj_out_dir = os.path.join(DOCUMENTATION_PROJECTS_PATH, project_folder_name)
     pdf_filename = f"{project_folder_name}.pdf"
     pdf_output_path = os.path.join(proj_out_dir, pdf_filename).replace("\\", "/")
@@ -665,56 +668,44 @@ def prepare_context(
     systems_map = get_positions_with_systems(csv_file)
     timestamp = datetime.datetime.now().strftime("%d.%m.%Y")
 
-    # ------------------------------------------------------------------
-    # DOKUMENTY — skanuj folder dokumentacji
-    # ------------------------------------------------------------------
-    documents = _build_documents_list(doc_folder, timestamp)
+    # ZMIANA: Przekaż project_folder_name dla fallback na datę
+    documents = _build_documents_list(doc_folder, project_folder_name, timestamp)
 
-    # ------------------------------------------------------------------
-    # KATALOGI SYSTEMOWE — znajdź dla każdego wykrytego systemu
-    # ------------------------------------------------------------------
     catalogs = []
     for sys_name in systems_map.keys():
         cat = _find_system_catalog(vendor_key, sys_name)
         if cat:
             catalogs.append(cat)
         else:
-            # Dodaj pusty placeholder
             catalogs.append(
                 {
                     "name": sys_name.upper(),
                     "date": "—",
                     "path": "#",
-                    "status_icon": "🔴",
+                    "status_icon": "⚪",
                     "status_text": "Brak katalogu",
                 }
             )
 
-    # ------------------------------------------------------------------
-    # KONTEKST BAZOWY
-    # ------------------------------------------------------------------
     context = {
         "project_folder_name": project_folder_name,
         "project_client": proj_info["client"],
         "project_number": proj_info["number"],
         "project_desc": proj_info["desc"],
-        "logo_path": f"{RELATIVE_DEPTH_TO_BASE}/logo.png",
+        "logo_path": "../../logo.png",
         "pdf_output_path": pdf_output_path,
         "generation_date": timestamp,
         "author": os.getlogin(),
         "systems": list(systems_map.keys()),
         "systems_data": {},
         "global_hardware": [],
-        "documents": documents,
+        "documents": documents,  # ← tu są już wszystkie + JOB
         "catalogs": catalogs,
         "instructions": [],
     }
 
     all_hardware_map = {}
 
-    # ------------------------------------------------------------------
-    # PĘTLA PO SYSTEMACH
-    # ------------------------------------------------------------------
     for sys_name, positions in systems_map.items():
         system_entries = []
 
@@ -743,7 +734,6 @@ def prepare_context(
                 safe_code = display_code.replace(" ", "%20")
                 checklist_id = f"{display_code.replace(' ', '_')}_{pos_num}"
 
-                # Szukaj strony katalogowej
                 catalog_page = _find_hardware_catalog_page(
                     vendor_key, sys_name, display_code
                 )
@@ -753,10 +743,7 @@ def prepare_context(
                         "code": display_code,
                         "desc": desc,
                         "quantity": hw["quantity"],
-                        "image_path": (
-                            f"{RELATIVE_DEPTH_TO_BASE}/images_db"
-                            f"/{vendor_key}/hardware/{safe_code}.jpg"
-                        ),
+                        "image_path": f"../../images_db/{vendor_key}/hardware/{safe_code}.jpg",
                         "catalog_link": catalog_page,
                         "checklist_id": checklist_id,
                     }
@@ -777,15 +764,10 @@ def prepare_context(
 
         context["systems_data"][sys_name] = system_entries
 
-    # ------------------------------------------------------------------
-    # GLOBALNA TABELA OKUĆ
-    # ------------------------------------------------------------------
     for code, meta in sorted(all_hardware_map.items()):
         desc = meta["desc"]
         sys_name = meta["sys_name"]
-        img_path = (
-            f"{RELATIVE_DEPTH_TO_BASE}/images_db" f"/{vendor_key}/hardware/{code}.jpg"
-        )
+        img_path = f"../../images_db/{vendor_key}/hardware/{code}.jpg"
         catalog_page = _find_hardware_catalog_page(vendor_key, sys_name, code)
 
         context["global_hardware"].append(
@@ -802,35 +784,280 @@ def prepare_context(
     return context
 
 
-def _build_documents_list(doc_folder: str, timestamp: str) -> list[dict]:
+def _extract_date_from_filename(filename: str, folder_name: str = "") -> str:
+    """
+    Wyciąga datę z nazwy pliku w formacie DD.MM.YYYY.
+
+    Szuka wzorców:
+      - DD-MM-YY (np. 2-12-25, 23-01-26)
+      - DD-MM-YYYY (np. 23-01-2026)
+      - DD.MM.YY (np. 2.12.25)
+      - DD.MM.YYYY (np. 23.01.2026)
+      - YYYY-MM-DD (np. 2025-12-02)
+
+    Jeśli nie znaleziona w pliku → szuka w nazwie folderu projektu.
+    Fallback: dzisiejsza data.
+
+    Zwraca: DD.MM.YYYY
+    """
+
+    # --- OPCJA 1: Szukaj w nazwie pliku ---
+
+    # Pattern: DD-MM-YY lub DD-MM-YYYY
+    match = re.search(r"(\d{1,2})-(\d{1,2})-(\d{2,4})", filename)
+    if match:
+        day, month, year = match.groups()
+        day, month = int(day), int(month)
+        year = int(year)
+
+        # Konwersja YY → YYYY (jeśli < 100)
+        if year < 100:
+            year = 2000 + year if year <= 50 else 1900 + year
+
+        try:
+            date_obj = datetime.datetime(year, month, day)
+            return date_obj.strftime("%d.%m.%Y")
+        except ValueError:
+            pass  # Niedozwolona data, spróbuj inny pattern
+
+    # Pattern: DD.MM.YY lub DD.MM.YYYY
+    match = re.search(r"(\d{1,2})\.(\d{1,2})\.(\d{2,4})", filename)
+    if match:
+        day, month, year = match.groups()
+        day, month = int(day), int(month)
+        year = int(year)
+
+        if year < 100:
+            year = 2000 + year if year <= 30 else 1900 + year
+
+        try:
+            date_obj = datetime.datetime(year, month, day)
+            return date_obj.strftime("%d.%m.%Y")
+        except ValueError:
+            pass
+
+    # Pattern: YYYY-MM-DD (ISO format)
+    match = re.search(r"(\d{4})-(\d{1,2})-(\d{1,2})", filename)
+    if match:
+        year, month, day = match.groups()
+        try:
+            date_obj = datetime.datetime(int(year), int(month), int(day))
+            return date_obj.strftime("%d.%m.%Y")
+        except ValueError:
+            pass
+
+    # --- OPCJA 2: Szukaj w nazwie folderu projektu ---
+    if folder_name:
+        # Pattern folder: 2025-18-12_xxx lub 2026-01-23_xxx
+        match = re.search(r"(\d{4})-(\d{1,2})-(\d{1,2})", folder_name)
+        if match:
+            year, month, day = match.groups()
+            try:
+                date_obj = datetime.datetime(int(year), int(month), int(day))
+                return date_obj.strftime("%d.%m.%Y")
+            except ValueError:
+                pass
+
+    # --- FALLBACK: Dzisiejsza data ---
+    return datetime.datetime.now().strftime("%d.%m.%Y")
+
+
+def _scan_project_documents(
+    doc_folder: str, project_folder_name: str = ""
+) -> list[dict]:
+    """
+    Skanuje folder projektu w poszukiwaniu dokumentów:
+      - PDF z prefixem: LP, LC, Rys, RK
+      - Pliki: .dwg (bez recover), .met (TYLKO LOKALNY)
+
+    Dla każdego pliku generuje dwa wiersza: (lokalny) i (sieciowy)
+    Wyjątek: .met tylko lokalny
+
+    Data: z nazwy pliku → fallback na folder projektu → dzisiaj
+
+    Zwraca listę słowników gotowych dla kontekstu Jinja2.
+    """
+    if not doc_folder or not os.path.isdir(doc_folder):
+        return []
+
+    found = []
+    seen_types = {}
+
+    try:
+        entries = os.listdir(doc_folder)
+    except PermissionError:
+        print(f"⚠️ Brak dostępu do folderu: {doc_folder}")
+        return []
+
+    for filename in sorted(entries):
+        filepath = os.path.join(doc_folder, filename)
+
+        if not os.path.isfile(filepath):
+            continue
+
+        name_lower = filename.lower()
+        ext = os.path.splitext(filename)[1].lower()
+        name_no_ext = os.path.splitext(filename)[0]
+
+        # --- SKIP: Recover files dla DWG ---
+        if ext == ".dwg" and "recover" in name_lower:
+            print(f"⏭️  Pomijam plik recover: {filename}")
+            continue
+
+        label = None
+        doc_type = None
+        is_met = False
+
+        # --- Rozszerzenia binarne (.dwg, .met, .rey, .ali) ---
+        if ext == ".dwg":
+            label = "Rysunek .DWG"
+            doc_type = "DWG"
+        elif ext == ".met":
+            label = "Plik .MET"
+            doc_type = "MET"
+            is_met = True
+        elif ext == ".rey":
+            label = "Plik .REY"
+            doc_type = "REY"
+        elif ext == ".ali":
+            label = "Plik .ALI"
+            doc_type = "ALI"
+
+        # --- Prefixy PDF ---
+        elif ext == ".pdf":
+            if name_no_ext.upper().startswith("LP") or name_lower.startswith(
+                "lista produkcyjna"
+            ):
+                label = "Lista Produkcyjna"
+                doc_type = "LP"
+            elif name_no_ext.upper().startswith("LC") or name_lower.startswith(
+                "lista cięcia"
+            ):
+                label = "Lista Cięcia"
+                doc_type = "LC"
+            elif name_no_ext.upper().startswith("RYS") or name_lower.startswith(
+                "rysunek"
+            ):
+                label = "Rysunek"
+                doc_type = "RYS"
+            elif name_no_ext.upper().startswith("RK") or name_lower.startswith(
+                "rysunek konstrukcyjny"
+            ):
+                label = "Rysunek Konstrukcyjny"
+                doc_type = "RK"
+
+        if not label:
+            continue
+
+        # --- NOWA LOGIKA: Data z nazwy pliku + fallback na folder ---
+        date_str = _extract_date_from_filename(filename, project_folder_name)
+
+        # --- Unikaj duplikatów tego samego typu ---
+        if doc_type not in seen_types:
+            seen_types[doc_type] = 0
+        else:
+            seen_types[doc_type] += 1
+            label = f"{label} ({seen_types[doc_type] + 1})"
+
+        seen_types[doc_type] += 1
+
+        # --- TYLKO .MET = lokalny link ---
+        if is_met:
+            local_link = _local_to_relative(filepath, "")
+            found.append(
+                {
+                    "name": label,
+                    "date": date_str,
+                    "path": local_link,
+                    "local": True,
+                }
+            )
+        else:
+            # --- INNE PLIKI = lokalny + sieciowy ---
+            local_link = _local_to_relative(filepath, "")
+            network_link = _local_to_network_relative(filepath)
+
+            # Lokalny
+            found.append(
+                {
+                    "name": f"{label} (dysk lokalny C:\\)",
+                    "date": date_str,
+                    "path": local_link,
+                    "local": True,
+                }
+            )
+
+            # Sieciowy
+            found.append(
+                {
+                    "name": f"{label} (dysk sieciowy Z:\\)",
+                    "date": date_str,
+                    "path": network_link,
+                    "local": False,
+                }
+            )
+
+    return found
+
+
+def _build_documents_list(
+    doc_folder: str, project_folder_name: str, timestamp: str
+) -> list[dict]:
     """
     Buduje listę dokumentów z folderu projektu + wiersze JOB.
+
+    Args:
+        doc_folder: ścieżka do folderu z dokumentacją
+        project_folder_name: nazwa folderu projektu (do fallback na datę)
+        timestamp: bieżąca data dla JOB (format DD.MM.YYYY)
     """
     documents = []
 
-    # Skanuj folder
-    scanned = _scan_project_documents(doc_folder)
+    # Skanuj folder (przekaż project_folder_name dla fallback)
+    scanned = _scan_project_documents(doc_folder, project_folder_name)
     documents.extend(scanned)
 
-    # Wiersze JOB (placeholdery)
-    local_link, network_link = _build_job_links()
+    # Dodaj wiersze JOB
+    job_links = _build_job_links(timestamp)
+    documents.extend(job_links)
 
-    documents.append(
+    return documents
+
+
+def _build_job_links(timestamp: str) -> list[dict]:
+    """
+    Zwraca dwa wiersze dla JOB (lokalny i sieciowy).
+    Oba kończą się na /Lotti/ (bez konkretnego pliku).
+
+    Logika:
+    - Lokalny: bezwzględna ścieżka C:/JOB/Lotti/
+    - Sieciowy: relatywna ../../../../JOB/Lotti/
+
+    Zwraca listę dwóch słowników (aby dodać do documents).
+    """
+    local_norm = JOB_PATH_LOCAL.replace("\\", "/")
+
+    # Sieciowy: JOB jest w Z:\ na tym samym poziomie co Pawel_Pisarski
+    # MD: Z:/Pawel_Pisarski/Dokumentacja/projects/FOLDER/
+    # JOB: Z:/JOB/
+    # Głębokość: ../../.. = Pawel_Pisarski, ../../../../ = Z:\
+    job_network_rel = "../../../../JOB/Lotti/"
+
+    local_link = _url_encode(f"{local_norm}/")
+    network_link = _url_encode(job_network_rel)
+
+    return [
         {
             "name": "Plik JOB (dysk lokalny C:\\)",
             "date": timestamp,
             "path": local_link,
-        }
-    )
-    documents.append(
+        },
         {
             "name": "Plik JOB (dysk sieciowy Z:\\)",
             "date": timestamp,
             "path": network_link,
-        }
-    )
-
-    return documents
+        },
+    ]
 
 
 # ==========================================
@@ -904,19 +1131,16 @@ def _update_project_index(context):
 if __name__ == "__main__":
     print("🚀 Tryb Interaktywny Generatora Dokumentacji")
 
-    # 1. Wybierz CSV (ilości)
     csv_path = select_file("CSV", "Wybierz plik LP_dane.csv (Ilości)")
     if not csv_path:
         print("❌ Anulowano wybór pliku CSV.")
         exit()
 
-    # 2. Wybierz CSV (baza wiedzy ZM)
     zm_path = select_file("CSV", "Wybierz plik ZM_dane.csv (Baza Wiedzy)")
     if not zm_path:
         print("❌ Anulowano wybór pliku ZM.")
         exit()
 
-    # 3. Wybierz folder projektu (zdjęcia rzutów)
     base_proj_dir = PROJECTS_IMAGES
     print(f"📂 Wybierz folder projektu (rzuty) w: {base_proj_dir}")
     project_dir = select_folder("Wybierz folder projektu (zrzuty)")
@@ -927,7 +1151,6 @@ if __name__ == "__main__":
     project_name = os.path.basename(project_dir)
     print(f"✅ Wybrano projekt: {project_name}")
 
-    # 4. Wybierz dostawcę
     vendor_profile = select_vendor()
     if not vendor_profile:
         print("❌ Anulowano wybór dostawcy.")
@@ -936,12 +1159,9 @@ if __name__ == "__main__":
     vendor_key = vendor_profile.KEY
     print(f"✅ Wybrano dostawcę: {vendor_key}")
 
-    # 5. Znajdź folder dokumentacji (LP, LC, DWG, MET)
-    proj_info = _parse_project_name(project_name)
-    proj_number = proj_info.get("number", "")
-
-    print(f"\n📂 Szukam folderu dokumentacji dla: {proj_number}")
-    doc_folder = _select_designer_and_find_project(proj_number)
+    # TYMCZASOWE: Wybór manual zamiast _select_designer_and_find_project
+    print("\n📂 Wybierz folder z dokumentacją projektu")
+    doc_folder = select_folder("Wybierz folder z dokumentacją projektu")
 
     if not doc_folder:
         print("⚠️ Nie wybrano folderu dokumentacji — sekcja Dokumentacja będzie pusta.")
@@ -949,7 +1169,6 @@ if __name__ == "__main__":
     else:
         print(f"✅ Folder dokumentacji: {doc_folder}")
 
-    # 6. Uruchom generator
     if os.path.exists(csv_path):
         ctx = prepare_context(csv_path, zm_path, project_name, vendor_key, doc_folder)
         render_markdown(ctx)
