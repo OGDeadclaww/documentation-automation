@@ -639,9 +639,10 @@ def prepare_context(
     systems_map = get_positions_with_systems(csv_file)
     timestamp = datetime.datetime.now().strftime("%d.%m.%Y")
 
-    # ZMIANA: Przekaż project_folder_name dla fallback na datę
+    # --- DOKUMENTY ---
     documents = _build_documents_list(doc_folder, project_folder_name, timestamp)
 
+    # --- KATALOGI SYSTEMOWE ---
     catalogs = []
     for sys_name in systems_map.keys():
         cat = _find_system_catalog(vendor_key, sys_name)
@@ -658,6 +659,7 @@ def prepare_context(
                 }
             )
 
+    # --- KONTEKST BAZOWY ---
     context = {
         "project_folder_name": project_folder_name,
         "project_client": proj_info["client"],
@@ -670,23 +672,26 @@ def prepare_context(
         "systems": list(systems_map.keys()),
         "systems_data": {},
         "global_hardware": [],
-        "documents": documents,  # ← tu są już wszystkie + JOB
+        "documents": documents,
         "catalogs": catalogs,
         "instructions": [],
     }
 
     all_hardware_map = {}
 
+    # --- PĘTLA PO SYSTEMACH I POZYCJACH ---
     for sys_name, positions in systems_map.items():
         system_entries = []
 
         for pos_num in positions:
             view_path = _get_view_for_position(project_folder_name, pos_num)
 
+            # --- PROFILE ---
             profiles = _get_profiles_for_position(
                 csv_file, pos_num, vendor_key, vendor_cls, sys_name, product_db
             )
 
+            # --- HARDWARE (OBRÓBKI) ---
             pos_data = get_data_for_position(csv_file, pos_num, vendor_cls, product_db)
             hardware_list = []
 
@@ -696,6 +701,7 @@ def prepare_context(
                 normalized_code = vendor_cls.parse_profile_code(raw_code)
                 display_code = normalized_code if normalized_code else raw_code
 
+                # Dodaj do globalnej mapy
                 if display_code not in all_hardware_map:
                     all_hardware_map[display_code] = {
                         "desc": desc,
@@ -705,9 +711,14 @@ def prepare_context(
                 safe_code = display_code.replace(" ", "%20")
                 checklist_id = f"{display_code.replace(' ', '_')}_{pos_num}"
 
-                catalog_page = _find_hardware_catalog_page(
+                # --- NOWA LOGIKA: Wylicz link + sprawdź istnienie pliku ---
+                catalog_link, file_exists = _build_hardware_catalog_link(
                     vendor_key, sys_name, display_code
                 )
+
+                # Status: ikona + tekst
+                status_icon = "✅" if file_exists else "🔴"
+                status_text = "" if file_exists else "Brak w katalogu"
 
                 hardware_list.append(
                     {
@@ -715,7 +726,10 @@ def prepare_context(
                         "desc": desc,
                         "quantity": hw["quantity"],
                         "image_path": f"../../images_db/{vendor_key}/hardware/{safe_code}.jpg",
-                        "catalog_link": catalog_page,
+                        "catalog_link": catalog_link,
+                        "file_exists": file_exists,
+                        "status_icon": status_icon,
+                        "status_text": status_text,
                         "checklist_id": checklist_id,
                     }
                 )
@@ -735,19 +749,28 @@ def prepare_context(
 
         context["systems_data"][sys_name] = system_entries
 
+    # --- GLOBALNA TABELA OKUĆ ---
     for code, meta in sorted(all_hardware_map.items()):
         desc = meta["desc"]
         sys_name = meta["sys_name"]
         img_path = f"../../images_db/{vendor_key}/hardware/{code}.jpg"
-        catalog_page = _find_hardware_catalog_page(vendor_key, sys_name, code)
+
+        # Wylicz link + sprawdź istnienie
+        catalog_link, file_exists = _build_hardware_catalog_link(
+            vendor_key, sys_name, code
+        )
+
+        status_icon = "✅" if file_exists else "🔴"
+        status_text = "Katalog OK" if file_exists else "Brak w katalogu"
 
         context["global_hardware"].append(
             {
                 "code": code,
                 "desc": desc,
                 "image_path": img_path.replace(" ", "%20"),
-                "catalog_link": catalog_page,
-                "status": "🟡 0/0",
+                "catalog_link": catalog_link,
+                "file_exists": file_exists,
+                "status": f"{status_icon} {status_text}",
                 "notes": "",
             }
         )
@@ -1015,6 +1038,65 @@ def _build_job_links(timestamp: str) -> list[dict]:
             "type": "network_remote",  # ← SIECIOWY (dysk Z:\)
         },
     ]
+
+
+def _build_hardware_catalog_link(
+    vendor_key: str,
+    sys_name: str,
+    hw_code: str,
+) -> tuple[str, bool]:
+    """
+    Wylicza docelowy link do PDF okucia w katalogu.
+
+    Konwencja nazwy: {kod}_{skrócony_opis}.pdf
+    Przykład: 801.9229.07_obrobka.pdf
+
+    Zwraca:
+        (link_relatywny, czy_plik_istnieje)
+
+    Logika:
+    - Niezależnie od istnienia pliku wylicza docelową ścieżkę
+    - Sprawdza czy plik fizycznie istnieje na dysku
+    - Zwraca tuple: (link_URL, file_exists_bool)
+
+    Przykład zwrotu:
+        ("../../../Katalogi/Reynaers/MASTERLINE-8/801.9229.07_obrobka.pdf", False)
+    """
+    vendor_folder = VENDOR_CATALOG_FOLDERS.get(vendor_key)
+    if not vendor_folder:
+        print(f"⚠️  Vendor '{vendor_key}' nie znaleziony")
+        return "#", False
+
+    sys_folder_upper = sys_name.upper()
+
+    # Normalizuj kod: zamień spacje na underscore
+    code_normalized = hw_code.replace(" ", "_")
+
+    # Docelowa nazwa pliku (konwencja: {kod}_obrobka.pdf)
+    target_filename = f"{code_normalized}_obrobka.pdf"
+
+    # Pełna ścieżka fizyczna
+    target_path = os.path.join(
+        CATALOGS_PATH, vendor_folder, sys_folder_upper, target_filename
+    )
+
+    # Sprawdzamy czy plik istnieje
+    file_exists = os.path.isfile(target_path)
+
+    # Budujemy link relatywny NIEZALEŻNIE od istnienia pliku
+    rel_link = (
+        f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/"
+        f"{vendor_folder}/{sys_folder_upper}/{target_filename}"
+    )
+    rel_link_encoded = _url_encode(rel_link)
+
+    # DEBUG: Wypisz status
+    if file_exists:
+        print(f"✅ Znaleziony: {hw_code} → {target_filename}")
+    else:
+        print(f"⚠️  Brak pliku (link gotowy): {hw_code} → {target_filename}")
+
+    return rel_link_encoded, file_exists
 
 
 # ==========================================

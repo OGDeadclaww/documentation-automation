@@ -95,7 +95,7 @@ puppeteer:
 [🔝 Spis Treści](#spis-treści)
 
 > **Legenda:**
-> 🟢 Zweryfikowane | 🟡 Do sprawdzenia | 🔴 Brak w katalogu | — Brak Strony |📐 Wymaga obróbki CNC
+> ✅ Katalog OK | 🔴 Brak w katalogu | 📐 Wymaga obróbki CNC
 
 | Kod | Opis | Rysunek | Katalog | Status | Uwagi |
 | :--: | :-- | :--: | :--: | :--: | :-- |
@@ -165,10 +165,10 @@ puppeteer:
 
 [⬆️ Spis Treści](#spis-treści)
 
-| Kod | Opis | Rysunek | Ilość | Katalog | UWAGI |
-| :--: | :-- | :--: | :--: | :--: | :-- |
+| Kod | Opis | Rysunek | Ilość | Katalog | Status |
+| :--: | :-- | :--: | :--: | :--: | :--: |
 {% for hw in pos.hardware -%}
-| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | [Checklista](#checklist-{{ hw.checklist_id }}) |
+| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | {{ hw.status_icon }} {{ hw.status_text }} |
 {% endfor %}
 
 ---
