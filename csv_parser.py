@@ -358,7 +358,43 @@ def extract_color_codes_from_csv(csv_path: str) -> list:
 
 
 def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
-    return {}  # Uproszczone, nieużywane w nowym generatorze
+    """
+    Zwraca słownik wszystkich okuć w projekcie.
+    Używa nowej logiki get_data_for_position iterując po pozycjach.
+    Format: { "KOD": { "desc": "...", "positions": {"1", "2"} } }
+    """
+    # 1. Pobierz wszystkie pozycje
+    # Używamy get_positions_from_csv (które działa na regexach) lub lepiej:
+    # Pobierzmy unikalne pozycje skanując plik raz.
+    rows = _read_csv_rows(csv_path)
+    positions = set()
+    for row in rows:
+        line = ";".join(row)
+        m = POZ_LINE_RE.search(line)
+        if m:
+            positions.add(m.group(1))
+
+    hardware_codes = {}
+
+    # 2. Dla każdej pozycji pobierz dane nowym parserem
+    # Uwaga: To może być wolne dla dużych projektów (wiele razy czyta plik).
+    # Ale jest bezpieczne i spójne z dokumentacją.
+    # Wymaga product_db? rename_images go nie ma.
+    # Zrobimy wersję uproszczoną bez product_db (fallback na heurystykę parsera).
+
+    for pos in positions:
+        data = get_data_for_position(csv_path, pos, vendor_profile, product_db=None)
+
+        for hw in data["hardware"]:
+            code = hw["code"]
+            desc = hw["desc"]
+
+            if code not in hardware_codes:
+                hardware_codes[code] = {"desc": desc, "positions": set()}
+
+            hardware_codes[code]["positions"].add(pos)
+
+    return hardware_codes
 
 
 def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
