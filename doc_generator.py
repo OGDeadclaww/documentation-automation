@@ -416,59 +416,57 @@ def _find_hardware_catalog_page(
     Szuka strony katalogowej (PDF) dla konkretnego okucia.
 
     Struktura:
-      Katalogi/{Vendor}/{SYS_NAME_UPPER}/{hw_code}*.pdf
+      Katalogi/{Vendor}/{SYS_NAME_UPPERCASE}/{hw_code}*.pdf
 
-    Dopasowanie po kodzie (case-insensitive, ignoruje opis po _).
     Zwraca relatywną ścieżkę MD lub '#' jeśli nie znaleziono.
     """
     vendor_folder = VENDOR_CATALOG_FOLDERS.get(vendor_key)
     if not vendor_folder:
+        print(f"⚠️ Vendor '{vendor_key}' nie znaleziony w VENDOR_CATALOG_FOLDERS")
         return "#"
 
-    # Podfolder systemu — UPPERCASE zgodnie z konwencją
     sys_folder = sys_name.upper()
     hw_dir = os.path.join(CATALOGS_PATH, vendor_folder, sys_folder)
 
+    print(f"🔍 Szukam w: {hw_dir}")
+    print(f"   Kod: {hw_code}")
+
     if not os.path.isdir(hw_dir):
+        print(f"⚠️ Katalog nie istnieje: {hw_dir}")
         return "#"
 
     # Normalizuj kod: zamień spacje na _ dla porównania
-    code_normalized = hw_code.replace(" ", "_").replace(".", ".").lower()
+    code_normalized = hw_code.replace(" ", "_").replace(".", "").lower()
+
+    print(f"   Kod znormalizowany: {code_normalized}")
 
     # Szukaj pliku zaczynającego się od kodu
     try:
+        all_files = os.listdir(hw_dir)
+        print(f"   Pliki w folderze: {all_files[:5]}...")  # Pokaż pierwsze 5
+
         candidates = [
             f
-            for f in os.listdir(hw_dir)
+            for f in all_files
             if os.path.isfile(os.path.join(hw_dir, f))
             and os.path.splitext(f)[1].lower() == ".pdf"
-            and f.lower().startswith(code_normalized)
+            and f.lower().replace("_", "").replace(".", "").startswith(code_normalized)
         ]
+
+        print(f"   Znalezieni kandydaci: {candidates}")
+
     except PermissionError:
+        print(f"⚠️ Brak dostępu do: {hw_dir}")
         return "#"
 
     if not candidates:
-        # Spróbuj bez normalizacji (tolerancja)
-        code_alt = hw_code.replace(" ", "").lower()
-        try:
-            candidates = [
-                f
-                for f in os.listdir(hw_dir)
-                if os.path.isfile(os.path.join(hw_dir, f))
-                and os.path.splitext(f)[1].lower() == ".pdf"
-                and f.lower()
-                .replace("_", "")
-                .replace(".", "")
-                .startswith(code_alt.replace("_", "").replace(".", ""))
-            ]
-        except PermissionError:
-            return "#"
-
-    if not candidates:
+        print(f"❌ Brak pasującego pliku dla: {hw_code}")
         return "#"
 
     # Bierz pierwszy pasujący
     filename = candidates[0]
+    print(f"✅ Wybrany plik: {filename}")
+
     rel_path = (
         f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/" f"{vendor_folder}/{sys_folder}/{filename}"
     )
