@@ -48,15 +48,29 @@ puppeteer:
 
 [⬆️ Spis Treści](#spis-treści)
 
+## Dokumenty Sieciowe (Z:\)
+
 <div style="page-break-inside: avoid;">
 
 | Dokument | Data | Link |
 | :-- | :--: | :--: |
-{% for doc in documents -%}
-| {{ doc.name }} | {{ doc.date }} | [📄 Otwórz]({{ doc.path }}) |
-{% endfor %}
-
+{% for doc in documents %}{% if doc.type == 'network_remote' %}| {{ doc.name }} | {{ doc.date }} | [📄 Otwórz]({{ doc.path }}) |
+{% endif %}{% endfor %}
 </div>
+
+---
+
+## Dokumenty Lokalne (C:\)
+
+<div style="page-break-inside: avoid;">
+
+| Dokument | Data | Link |
+| :-- | :--: | :--: |
+{% for doc in documents %}{% if doc.type == 'network_local' or doc.type == 'local_only' %}| {{ doc.name }} | {{ doc.date }} | [📄 Otwórz]({{ doc.path }}) |
+{% endif %}{% endfor %}
+</div>
+
+---
 
 ---
 
@@ -81,7 +95,7 @@ puppeteer:
 [🔝 Spis Treści](#spis-treści)
 
 > **Legenda:**
-> 🟢 Zweryfikowane | 🟡 Do sprawdzenia | 🔴 Brak w katalogu | — Brak Strony |📐 Wymaga obróbki CNC
+> ✅ Katalog OK | 🔴 Brak w katalogu | 📐 Wymaga obróbki CNC
 
 | Kod | Opis | Rysunek | Katalog | Status | Uwagi |
 | :--: | :-- | :--: | :--: | :--: | :-- |
@@ -151,10 +165,10 @@ puppeteer:
 
 [⬆️ Spis Treści](#spis-treści)
 
-| Kod | Opis | Rysunek | Ilość | Katalog | UWAGI |
-| :--: | :-- | :--: | :--: | :--: | :-- |
+| Kod | Opis | Rysunek | Ilość | Katalog | Status |
+| :--: | :-- | :--: | :--: | :--: | :--: |
 {% for hw in pos.hardware -%}
-| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | [Checklista](#checklist-{{ hw.checklist_id }}) |
+| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | {{ hw.status_icon }} {{ hw.status_text }} |
 {% endfor %}
 
 ---
