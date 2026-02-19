@@ -1046,21 +1046,22 @@ def _build_hardware_catalog_link(
     hw_code: str,
 ) -> tuple[str, bool]:
     """
-    Wylicza docelowy link do PDF okucia w katalogu.
+    Wylicza link do PDF okucia w katalogu.
 
-    Konwencja nazwy: {kod}_{skrócony_opis}.pdf
-    Przykład: 801.9229.07_obrobka.pdf
+    Logika:
+    1. Szukaj rzeczywistego pliku pasującego do kodu
+    2. Jeśli znajdziesz → zwróć link do niego (file_exists=True)
+    3. Jeśli nie → zwróć fallback {kod}_obrobka.pdf (file_exists=False)
+
+    Konwencja fallback: {kod}_obrobka.pdf
+    Przykład: 87122404_obrobka.pdf
 
     Zwraca:
         (link_relatywny, czy_plik_istnieje)
 
-    Logika:
-    - Niezależnie od istnienia pliku wylicza docelową ścieżkę
-    - Sprawdza czy plik fizycznie istnieje na dysku
-    - Zwraca tuple: (link_URL, file_exists_bool)
-
-    Przykład zwrotu:
-        ("../../../Katalogi/Reynaers/MASTERLINE-8/801.9229.07_obrobka.pdf", False)
+    Przykłady zwrotu:
+        ("../../../Katalogi/Aluprof/MB-70/8712_2404_Sruba_RC4.pdf", True)   # Found
+        ("../../../Katalogi/Aluprof/MB-70/87122404_obrobka.pdf", False)      # Fallback
     """
     vendor_folder = VENDOR_CATALOG_FOLDERS.get(vendor_key)
     if not vendor_folder:
@@ -1068,35 +1069,56 @@ def _build_hardware_catalog_link(
         return "#", False
 
     sys_folder_upper = sys_name.upper()
+    hw_dir = os.path.join(CATALOGS_PATH, vendor_folder, sys_folder_upper)
 
-    # Normalizuj kod: zamień spacje na underscore
+    # Jeśli folder nie istnieje — zwróć fallback
+    if not os.path.isdir(hw_dir):
+        print(f"⚠️  Folder nie istnieje: {hw_dir}")
+        code_normalized = hw_code.replace(" ", "_")
+        fallback_filename = f"{code_normalized}_obrobka.pdf"
+        rel_link = (
+            f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/"
+            f"{vendor_folder}/{sys_folder_upper}/{fallback_filename}"
+        )
+        return _url_encode(rel_link), False
+
+    # Normalizuj kod do szukania: usuń spacje, zamień . na nic
+    code_search = hw_code.replace(" ", "").replace(".", "").lower()
+
+    # Szukaj PDF-a pasującego do kodu
+    try:
+        all_files = os.listdir(hw_dir)
+        pdf_files = [f for f in all_files if f.lower().endswith(".pdf")]
+
+        # Szukamy pliku zaczynającego się od znormalizowanego kodu
+        matching_files = [
+            f
+            for f in pdf_files
+            if f.lower().replace("_", "").replace(".", "").startswith(code_search)
+        ]
+
+        if matching_files:
+            # Znaleźliśmy plik! Zwróć link do niego
+            found_filename = matching_files[0]
+            rel_link = (
+                f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/"
+                f"{vendor_folder}/{sys_folder_upper}/{found_filename}"
+            )
+            print(f"✅ Znaleziony: {hw_code} → {found_filename}")
+            return _url_encode(rel_link), True
+
+    except PermissionError:
+        print(f"⚠️  Brak dostępu do: {hw_dir}")
+
+    # Nie znaleziono — zwróć fallback
     code_normalized = hw_code.replace(" ", "_")
-
-    # Docelowa nazwa pliku (konwencja: {kod}_obrobka.pdf)
-    target_filename = f"{code_normalized}_obrobka.pdf"
-
-    # Pełna ścieżka fizyczna
-    target_path = os.path.join(
-        CATALOGS_PATH, vendor_folder, sys_folder_upper, target_filename
-    )
-
-    # Sprawdzamy czy plik istnieje
-    file_exists = os.path.isfile(target_path)
-
-    # Budujemy link relatywny NIEZALEŻNIE od istnienia pliku
+    fallback_filename = f"{code_normalized}_obrobka.pdf"
     rel_link = (
         f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/"
-        f"{vendor_folder}/{sys_folder_upper}/{target_filename}"
+        f"{vendor_folder}/{sys_folder_upper}/{fallback_filename}"
     )
-    rel_link_encoded = _url_encode(rel_link)
-
-    # DEBUG: Wypisz status
-    if file_exists:
-        print(f"✅ Znaleziony: {hw_code} → {target_filename}")
-    else:
-        print(f"⚠️  Brak pliku (link gotowy): {hw_code} → {target_filename}")
-
-    return rel_link_encoded, file_exists
+    print(f"⚠️  Brak pliku (fallback): {hw_code} → {fallback_filename}")
+    return _url_encode(rel_link), False
 
 
 # ==========================================
