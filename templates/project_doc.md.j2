@@ -48,15 +48,29 @@ puppeteer:
 
 [⬆️ Spis Treści](#spis-treści)
 
+## Dokumenty Sieciowe (Z:\)
+
 <div style="page-break-inside: avoid;">
 
 | Dokument | Data | Link |
 | :-- | :--: | :--: |
-{% for doc in documents -%}
-| {{ doc.name }} | {{ doc.date }} | [📄 Otwórz]({{ doc.path }}) |
-{% endfor %}
-
+{% for doc in documents %}{% if doc.type == 'network_remote' %}| {{ doc.name }} | {{ doc.date }} | [📄 Otwórz]({{ doc.path }}) |
+{% endif %}{% endfor %}
 </div>
+
+---
+
+## Dokumenty Lokalne (C:\)
+
+<div style="page-break-inside: avoid;">
+
+| Dokument | Data | Link |
+| :-- | :--: | :--: |
+{% for doc in documents %}{% if doc.type == 'network_local' or doc.type == 'local_only' %}| {{ doc.name }} | {{ doc.date }} | [📄 Otwórz]({{ doc.path }}) |
+{% endif %}{% endfor %}
+</div>
+
+---
 
 ---
 

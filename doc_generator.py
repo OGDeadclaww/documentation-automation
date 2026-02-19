@@ -76,56 +76,29 @@ def _file_date(filepath: str) -> str:
         return datetime.datetime.now().strftime("%d.%m.%Y")
 
 
-def _local_to_relative(
-    local_path: str,
-    md_output_dir: str,
-) -> str:
+def _local_to_relative(local_path: str, is_local: bool = True) -> str:
     """
-    Zamienia bezwzględną ścieżkę lokalną na relatywną względem folderu MD.
+    Zwraca ścieżkę w zależności od typu linku.
 
-    Przykład:
-      local_path   = C:/Users/pawel/Desktop/Zlecenia/Lukasz/Belgia/P220667/LP.pdf
-      md_output_dir = Z:/Pawel_Pisarski/Dokumentacja/projects/2025-xx_Projekt/
+    Args:
+        local_path: pełna ścieżka do pliku
+        is_local: True = zwróć bezwzględną ścieżkę C:/, False = zwróć relatywną sieciową
 
-      Logika: wycinamy wspólny suffix "Zlecenia/Lukasz/Belgia/P220667/LP.pdf"
-              i budujemy RELATIVE_DEPTH_TO_BASE + /Zlecenia/...
+    Returns:
+        - Jeśli is_local=True:  C:/Users/pawel/Desktop/Zlecenia/...
+        - Jeśli is_local=False: ../../../Zlecenia/... (relatywna od MD)
     """
     # Normalizuj separatory
     local_norm = local_path.replace("\\", "/")
-
-    # Wycinamy dysk i prefix lokalny do "Zlecenia"
-    # ZLECENIA_LOCAL = C:/Users/pawel/Desktop/Zlecenia
     zlecenia_local_norm = ZLECENIA_LOCAL.replace("\\", "/")
 
+    # --- LOKALNY: Zwróć bezwzględną ścieżkę C:/ ---
+    if is_local:
+        return _url_encode(local_norm)
+
+    # --- SIECIOWY: Zwróć relatywną ścieżkę ../../../ ---
     if local_norm.lower().startswith(zlecenia_local_norm.lower()):
         # suffix = Lukasz_Kukulka/Belgia/P220667/LP.pdf
-        suffix = local_norm[len(zlecenia_local_norm) :].lstrip("/")
-        rel = f"{RELATIVE_DEPTH_TO_BASE}/Zlecenia/{suffix}"
-        return _url_encode(rel)
-
-    # Fallback: zwróć bezwzględną ścieżkę lokalną z URL encoding
-    return _url_encode(local_norm)
-
-
-def _local_to_network_relative(local_path: str) -> str:
-    """
-    Zamienia ścieżkę lokalną (C:/Users/pawel/Desktop/Zlecenia/...)
-    na sieciową RELATYWNĄ (../../../Zlecenia/...).
-
-    Logika:
-    - Zamiast bezwzględnej C: pobieramy suffix od "Zlecenia/"
-    - Prefix RELATIVE_DEPTH_TO_BASE + /Zlecenia/ + suffix
-
-    Przykład:
-      C:/Users/pawel/Desktop/Zlecenia/Lukasz_K/Belgia/P220667/LP.pdf
-      → ../../../Zlecenia/Lukasz_K/Belgia/P220667/LP.pdf
-    """
-    # Normalizuj separatory
-    local_norm = local_path.replace("\\", "/")
-    zlecenia_local_norm = ZLECENIA_LOCAL.replace("\\", "/")
-
-    if local_norm.lower().startswith(zlecenia_local_norm.lower()):
-        # suffix = Lukasz_K/Belgia/P220667/LP.pdf
         suffix = local_norm[len(zlecenia_local_norm) :].lstrip("/")
         rel = f"{RELATIVE_DEPTH_TO_BASE}/Zlecenia/{suffix}"
         return _url_encode(rel)
@@ -866,16 +839,10 @@ def _scan_project_documents(
     doc_folder: str, project_folder_name: str = ""
 ) -> list[dict]:
     """
-    Skanuje folder projektu w poszukiwaniu dokumentów:
-      - PDF z prefixem: LP, LC, Rys, RK
-      - Pliki: .dwg (bez recover), .met (TYLKO LOKALNY)
-
-    Dla każdego pliku generuje dwa wiersza: (lokalny) i (sieciowy)
-    Wyjątek: .met tylko lokalny
-
-    Data: z nazwy pliku → fallback na folder projektu → dzisiaj
-
-    Zwraca listę słowników gotowych dla kontekstu Jinja2.
+    Skanuje folder projektu — zwraca dokumenty z podziałem:
+    - type='network_local':  LP/LC/DWG — link lokalny (C:\)
+    - type='network_remote': LP/LC/DWG — link sieciowy (Z:\)
+    - type='local_only':     .met/.rey/.ali — link lokalny
     """
     if not doc_folder or not os.path.isdir(doc_folder):
         return []
@@ -906,22 +873,24 @@ def _scan_project_documents(
 
         label = None
         doc_type = None
-        is_met = False
+        only_local = False
 
-        # --- Rozszerzenia binarne (.dwg, .met, .rey, .ali) ---
+        # --- Rozszerzenia binarne ---
         if ext == ".dwg":
             label = "Rysunek .DWG"
             doc_type = "DWG"
-        elif ext == ".met":
-            label = "Plik .MET"
-            doc_type = "MET"
-            is_met = True
-        elif ext == ".rey":
-            label = "Plik .REY"
-            doc_type = "REY"
-        elif ext == ".ali":
-            label = "Plik .ALI"
-            doc_type = "ALI"
+            only_local = False
+        elif ext in (".met", ".rey", ".ali"):
+            if ext == ".met":
+                label = "Plik .MET"
+                doc_type = "MET"
+            elif ext == ".rey":
+                label = "Plik .REY"
+                doc_type = "REY"
+            else:
+                label = "Plik .ALI"
+                doc_type = "ALI"
+            only_local = True
 
         # --- Prefixy PDF ---
         elif ext == ".pdf":
@@ -945,14 +914,14 @@ def _scan_project_documents(
             ):
                 label = "Rysunek Konstrukcyjny"
                 doc_type = "RK"
+            only_local = False
 
         if not label:
             continue
 
-        # --- NOWA LOGIKA: Data z nazwy pliku + fallback na folder ---
         date_str = _extract_date_from_filename(filename, project_folder_name)
 
-        # --- Unikaj duplikatów tego samego typu ---
+        # Unikaj duplikatów
         if doc_type not in seen_types:
             seen_types[doc_type] = 0
         else:
@@ -961,39 +930,39 @@ def _scan_project_documents(
 
         seen_types[doc_type] += 1
 
-        # --- TYLKO .MET = lokalny link ---
-        if is_met:
-            local_link = _local_to_relative(filepath, "")
+        # --- TYLKO LOKALNY: .met, .rey, .ali ---
+        if only_local:
+            local_link = _local_to_relative(filepath, is_local=True)
             found.append(
                 {
                     "name": label,
                     "date": date_str,
                     "path": local_link,
-                    "local": True,
+                    "type": "local_only",
                 }
             )
         else:
-            # --- INNE PLIKI = lokalny + sieciowy ---
-            local_link = _local_to_relative(filepath, "")
-            network_link = _local_to_network_relative(filepath)
+            # --- LOKALNY + SIECIOWY: LP, LC, Rys, RK, DWG ---
+            local_link = _local_to_relative(filepath, is_local=True)
+            network_link = _local_to_relative(filepath, is_local=False)
 
-            # Lokalny
+            # Wiersz LOKALNY (dysk C:\)
             found.append(
                 {
-                    "name": f"{label} (dysk lokalny C:\\)",
+                    "name": label,
                     "date": date_str,
                     "path": local_link,
-                    "local": True,
+                    "type": "network_local",  # ← NOWY TYP
                 }
             )
 
-            # Sieciowy
+            # Wiersz SIECIOWY (dysk Z:\)
             found.append(
                 {
-                    "name": f"{label} (dysk sieciowy Z:\\)",
+                    "name": label,
                     "date": date_str,
                     "path": network_link,
-                    "local": False,
+                    "type": "network_remote",  # ← NOWY TYP
                 }
             )
 
@@ -1026,21 +995,9 @@ def _build_documents_list(
 
 def _build_job_links(timestamp: str) -> list[dict]:
     """
-    Zwraca dwa wiersze dla JOB (lokalny i sieciowy).
-    Oba kończą się na /Lotti/ (bez konkretnego pliku).
-
-    Logika:
-    - Lokalny: bezwzględna ścieżka C:/JOB/Lotti/
-    - Sieciowy: relatywna ../../../../JOB/Lotti/
-
-    Zwraca listę dwóch słowników (aby dodać do documents).
+    Zwraca wiersze dla JOB (lokalny i sieciowy).
     """
     local_norm = JOB_PATH_LOCAL.replace("\\", "/")
-
-    # Sieciowy: JOB jest w Z:\ na tym samym poziomie co Pawel_Pisarski
-    # MD: Z:/Pawel_Pisarski/Dokumentacja/projects/FOLDER/
-    # JOB: Z:/JOB/
-    # Głębokość: ../../.. = Pawel_Pisarski, ../../../../ = Z:\
     job_network_rel = "../../../../JOB/Lotti/"
 
     local_link = _url_encode(f"{local_norm}/")
@@ -1048,14 +1005,16 @@ def _build_job_links(timestamp: str) -> list[dict]:
 
     return [
         {
-            "name": "Plik JOB (dysk lokalny C:\\)",
+            "name": "Plik JOB",
             "date": timestamp,
             "path": local_link,
+            "type": "network_local",  # ← LOKALNY (dysk C:\)
         },
         {
-            "name": "Plik JOB (dysk sieciowy Z:\\)",
+            "name": "Plik JOB",
             "date": timestamp,
             "path": network_link,
+            "type": "network_remote",  # ← SIECIOWY (dysk Z:\)
         },
     ]
 
