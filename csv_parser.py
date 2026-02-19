@@ -361,11 +361,9 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
     """
     Zwraca słownik wszystkich okuć w projekcie.
     Używa nowej logiki get_data_for_position iterując po pozycjach.
-    Format: { "KOD": { "desc": "...", "positions": {"1", "2"} } }
+    Normalizuje kody (np. zamienia kolor na XX) aby pasowały do mapowania obrazków.
+    Format: { "KOD_XX": { "desc": "...", "positions": {"1", "2"} } }
     """
-    # 1. Pobierz wszystkie pozycje
-    # Używamy get_positions_from_csv (które działa na regexach) lub lepiej:
-    # Pobierzmy unikalne pozycje skanując plik raz.
     rows = _read_csv_rows(csv_path)
     positions = set()
     for row in rows:
@@ -376,18 +374,19 @@ def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
 
     hardware_codes = {}
 
-    # 2. Dla każdej pozycji pobierz dane nowym parserem
-    # Uwaga: To może być wolne dla dużych projektów (wiele razy czyta plik).
-    # Ale jest bezpieczne i spójne z dokumentacją.
-    # Wymaga product_db? rename_images go nie ma.
-    # Zrobimy wersję uproszczoną bez product_db (fallback na heurystykę parsera).
-
     for pos in positions:
+        # Pobieramy surowe dane (bez product_db, bo rename_images może nie mieć ZM)
         data = get_data_for_position(csv_path, pos, vendor_profile, product_db=None)
 
         for hw in data["hardware"]:
-            code = hw["code"]
+            raw_code = hw["code"]
             desc = hw["desc"]
+
+            # --- NORMALIZACJA (XX) ---
+            # Używamy parsera dostawcy (ReynaersProfile) do zamiany RAL na XX
+            # Dzięki temu klucz będzie pasował do tego z html_processor.
+            normalized_code = vendor_profile.parse_hardware_code(raw_code)
+            code = normalized_code if normalized_code else raw_code
 
             if code not in hardware_codes:
                 hardware_codes[code] = {"desc": desc, "positions": set()}
