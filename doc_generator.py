@@ -584,8 +584,19 @@ def render_markdown(context: dict, output_filename: str = None):
     # Wylicz wersję PRZED renderowaniem
     version = _get_next_version(out_path, context.get("project_number", "UNKNOWN"))
 
-    # Dodaj wersję do kontekstu (dla szablonu)
+    # Nowy wpis historii
+    new_history_entry = {
+        "version": version,
+        "date": context["generation_date"],
+        "author": context["author"],
+    }
+
+    # Dodaj nowy wpis do historii (która była odczytana w prepare_context)
+    updated_history = context.get("version_history", []) + [new_history_entry]
+
+    # Zaktualizuj kontekst
     context["doc_version"] = version
+    context["version_history"] = updated_history
 
     rendered = template.render(context)
 
@@ -593,8 +604,9 @@ def render_markdown(context: dict, output_filename: str = None):
         f.write(rendered)
 
     print(f"✅ Wygenerowano: {os.path.abspath(out_path)} (v{version})")
+    print(f"📋 Historia: {[e['version'] for e in updated_history]}")
 
-    # Przekaż wersję do indeksu
+    # Zapisz do indeksu z pełną historią
     _update_project_index(context, version)
 
 
@@ -800,6 +812,21 @@ def prepare_context(
                 }
             )
 
+    # --- ODCZYTAJ HISTORIĘ WERSJI Z JSON ---
+    index_path = os.path.join(DOCUMENTATION_PROJECTS_PATH, "project_index.json")
+    version_history = []
+
+    proj_info = _parse_project_name(project_folder_name)
+    proj_num = proj_info.get("number", "UNKNOWN")
+
+    if os.path.exists(index_path):
+        try:
+            with open(index_path, "r", encoding="utf-8") as f:
+                index = json.load(f)
+            version_history = index.get(proj_num, {}).get("version_history", [])
+        except (json.JSONDecodeError, KeyError):
+            version_history = []
+
     # --- KONTEKST BAZOWY ---
     context = {
         "project_folder_name": project_folder_name,
@@ -816,6 +843,8 @@ def prepare_context(
         "documents": documents,
         "catalogs": catalogs,
         "instructions": [],
+        "version_history": version_history,  # ← NOWE
+        "doc_version": "1.0",  # placeholder, nadpisany w render_markdown
     }
 
     all_hardware_map = {}

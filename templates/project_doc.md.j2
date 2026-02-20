@@ -42,6 +42,7 @@ puppeteer:
 {% for system_name in systems %}
 - [{{ system_name }}](#{{ system_name | lower | replace(' ', '-') }})
 {% endfor %}
+- [📋 Historia Zmian](#-historia-zmian)
 
 ---
 
@@ -218,6 +219,17 @@ puppeteer:
 <div style="page-break-before: always;"></div>
 
 {% endfor %} {# Koniec pętli systemów #}
+
+---
+
+# 📋 Historia Zmian
+
+[⬆️ Spis Treści](#spis-treści)
+
+| Wersja | Data | Sporządził |
+| :--: | :--: | :-- |
+{% for entry in version_history | reverse %}| v{{ entry.version }} | {{ entry.date }} | {{ entry.author }} |
+{% endfor %}
 
 ---
 
