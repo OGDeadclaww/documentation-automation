@@ -44,3 +44,5 @@ __pycache__/
 __pycache__/
 *.pyc
 *.pyo
+data/uwagi_db.json
+data/uwagi_export.csv
