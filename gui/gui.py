@@ -11,7 +11,7 @@ from tkinter import filedialog, simpledialog, messagebox
 from difflib import get_close_matches
 
 from config import MAX_PREFIX_LENGTH, KNOWN_SYSTEMS
-from vendors import VENDOR_PROFILES, list_vendors
+from parsers.vendors import VENDOR_PROFILES, list_vendors
 
 # ============================================
 # WYBÓR DOSTAWCY

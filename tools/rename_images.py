@@ -11,8 +11,8 @@ from tkinter import messagebox
 
 from config import BASE_PATH, PROJECTS_IMAGES, IMAGES_DB
 from auth import check_authorization, log_audit
-from vendors import VENDOR_PROFILES
-from gui import (
+from parsers.vendors import VENDOR_PROFILES
+from gui.gui import (
     select_vendor,
     select_project_from_list,
     select_folder,
@@ -20,7 +20,7 @@ from gui import (
     validate_and_choose_system,
     confirm_detected_colors,
 )
-from csv_parser import (
+from parsers.csv_parser import (
     get_positions_from_csv,
     extract_system_from_csv,
     extract_color_codes_from_csv,

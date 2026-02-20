@@ -1,4 +1,4 @@
-from vendors import clean
+from parsers.vendors import clean
 
 
 def normalize_key(code):
