@@ -19,6 +19,7 @@ from config import (
     JOB_PATH_LOCAL,
     DOCUMENTATION_PROJECTS_PATH,
     RELATIVE_DEPTH_TO_BASE,
+    AUTHOR_NAME,
 )
 from gui import select_file, select_folder, select_vendor
 from db_builder import build_product_db
@@ -561,9 +562,19 @@ def _strip_date_from_folder_name(folder_name: str) -> str:
     return cleaned
 
 
+def _format_dimensions(value: str) -> str:
+    """Formatuje wymiary — kąty w nawiasach owijane w italic."""
+    if not value or not isinstance(value, str):
+        return value
+    # Szuka nawiasów zawierających ' lub ° (kąty) i owija w * (italic)
+    return re.sub(r"(\([^)]*[°'][^)]*\))", r"*\1*", value)
+
+
 def render_markdown(context: dict, output_filename: str = None):
     """Renderuje szablon Jinja2 do pliku MD w folderze projektu."""
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    # Rejestracja filtrów
+    env.filters["format_dim"] = _format_dimensions
     try:
         template = env.get_template("project_doc.md.j2")
     except Exception as e:
@@ -608,6 +619,30 @@ def render_markdown(context: dict, output_filename: str = None):
 
     # Zapisz do indeksu z pełną historią
     _update_project_index(context, version)
+
+
+def _get_clean_system_name(raw_name: str) -> str:
+    """
+    Czyści nazwę systemu z nieistotnych końcówek (HI, SI, ST),
+    ale zostawia BP, EI itp.
+    """
+    if not raw_name:
+        return "UNKNOWN"
+
+    from config import IGNORED_SYSTEM_SUFFIXES
+
+    parts = raw_name.split()  # Rozbijamy po spacjach
+    clean_parts = []
+
+    for p in parts:
+        # Usuwamy myślniki na końcach dla testu (np. MB-70-HI)
+        sub_parts = p.split("-")
+        filtered_sub = [
+            sp for sp in sub_parts if sp.upper() not in IGNORED_SYSTEM_SUFFIXES
+        ]
+        clean_parts.append("-".join(filtered_sub))
+
+    return " ".join(clean_parts).strip()
 
 
 # ==========================================
@@ -836,7 +871,7 @@ def prepare_context(
         "logo_path": "../../logo.png",
         "pdf_output_path": pdf_output_path,
         "generation_date": timestamp,
-        "author": os.getlogin(),
+        # "author": os.getlogin(), # Zmienione na stałą AUTHOR_NAME
         "systems": list(systems_map.keys()),
         "systems_data": {},
         "global_hardware": [],
@@ -845,6 +880,7 @@ def prepare_context(
         "instructions": [],
         "version_history": version_history,  # ← NOWE
         "doc_version": "1.0",  # placeholder, nadpisany w render_markdown
+        "author": AUTHOR_NAME,
     }
 
     all_hardware_map = {}

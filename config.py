@@ -101,3 +101,11 @@ KNOWN_SYSTEMS = [
     "smart",
     "genesis",
 ]
+
+# Końcówki, które nie zmieniają bazy katalogowej systemu
+IGNORED_SYSTEM_SUFFIXES = ["SI", "ST"]
+
+# ============================================
+# AUTOR PEŁNE ID (dla dokumentacji)
+# ============================================
+AUTHOR_NAME = "Paweł Pisarski"
