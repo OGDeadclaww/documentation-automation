@@ -7,16 +7,6 @@ Ten moduł:
 2. Wyciąga uwagi/notatki z sekcji konstrukcyjnych
 3. Zapisuje do centralnej bazy danych (data/uwagi_db.json)
 4. Umożliwia przeglądanie i eksport uwag
-
-Struktura uwagi:
-{
-    "project_number": "P241031",
-    "position": "Poz_1",
-    "system": "MB-70",
-    "note": "Treść uwagi",
-    "date_extracted": "20.02.2025",
-    "source_file": "path/to/file.md"
-}
 """
 
 import os
@@ -64,96 +54,122 @@ def extract_notes_from_markdown(md_file_path: str) -> List[Dict]:
     """
     Wyciąga uwagi z pojedynczego pliku Markdown.
 
-    Szuka wzorców:
-    - __BALOON_NOTES_PLACEHOLDER__POZ_X__
-    - Sekcji z uwagami konstrukcyjnymi
-    - Komentarzy w formacie <!-- note: ... -->
-
-    Args:
-        md_file_path: ścieżka do pliku .md
-
-    Returns:
-        Lista uwag z metadanymi
+    Wykrywa wzorce:
+    1. Sekcje "UWAGI" — listy pod nagłówkiem Uwagi/Notatki
+    2. Tabelka okuć — kolumna "Uwagi" (ostatnia kolumna)
+    3. Placeholdery — __BALOON_NOTES_PLACEHOLDER__POZ_X__
     """
     notes = []
 
     if not os.path.exists(md_file_path):
-        print(f"⚠️ Plik nie istnieje: {md_file_path}")
         return notes
 
     try:
         with open(md_file_path, "r", encoding="utf-8") as f:
             content = f.read()
+            lines = content.split("\n")
     except Exception as e:
         print(f"⚠️ Nie można odczytać pliku: {e}")
         return notes
 
-    # Ekstrahuj numer projektu z nazwy pliku/folderu
     project_number = extract_project_number(md_file_path)
     project_folder = os.path.basename(os.path.dirname(md_file_path))
 
-    # Pattern 1: Placeholdery uwag
-    placeholder_pattern = r"__BALOON_NOTES_PLACEHOLDER__POZ_(\w+)__"
-    for match in re.finditer(placeholder_pattern, content):
-        position = match.group(1)
-        notes.append(
-            {
-                "project_number": project_number,
-                "project_folder": project_folder,
-                "position": f"Poz_{position}",
-                "system": "UNKNOWN",  # Trzeba będzie powiązać z kontekstem
-                "note": "[Uwaga do wypełnienia]",
-                "status": "pending",
-                "date_extracted": datetime.datetime.now().strftime("%d.%m.%Y"),
-                "source_file": md_file_path,
-            }
-        )
+    # ==========================================
+    # WZORZEC 1: Sekcje UWAGI (listy pod nagłówkiem)
+    # ==========================================
+    in_uwagi_section = False
 
-    # Pattern 2: Komentarze HTML <!-- note: ... -->
-    comment_pattern = r"<!--\s*note:\s*(.*?)\s*-->"
-    for match in re.finditer(comment_pattern, content, re.DOTALL):
-        note_text = match.group(1).strip()
-        # Spróbuj wyciągnąć pozycję z kontekstu
-        pos_match = re.search(
-            r"Poz_(\w+)", content[max(0, match.start() - 100) : match.start()]
-        )
-        position = f"Poz_{pos_match.group(1)}" if pos_match else "UNKNOWN"
+    for line in lines:
+        ls = line.strip()
 
-        notes.append(
-            {
-                "project_number": project_number,
-                "project_folder": project_folder,
-                "position": position,
-                "system": "UNKNOWN",
-                "note": note_text,
-                "status": "extracted",
-                "date_extracted": datetime.datetime.now().strftime("%d.%m.%Y"),
-                "source_file": md_file_path,
-            }
-        )
+        # Wykryj początek sekcji UWAGI
+        if re.match(r"#{1,4}\s*(UWAGI|Uwagi|NOTATKI|Notatki)", ls, re.IGNORECASE):
+            in_uwagi_section = True
+            continue
 
-    # Pattern 3: Sekcje z uwagami (### Uwagi, ## Notatki, itp.)
-    section_pattern = r"#{1,3}\s*(Uwagi|Notatki|Komentarze)\s*\n(.*?)(?=\n#{1,3}|\Z)"
-    for match in re.finditer(section_pattern, content, re.DOTALL | re.IGNORECASE):
-        _ = match.group(1)  # Unused - section title not needed
-        section_content = match.group(2).strip()
+        # Wykryj koniec sekcji (nowy nagłówek)
+        if in_uwagi_section and ls.startswith("#"):
+            in_uwagi_section = False
+            continue
 
-        # Podziel na poszczególne uwagi (po liniach)
-        for line in section_content.split("\n"):
-            line = line.strip()
-            if line and not line.startswith("-"):
+        # Parsuj elementy w sekcji UWAGI
+        if in_uwagi_section and ls.startswith("- "):
+            # Skip "Brak Uwag"
+            if "Brak Uwag" in ls or "Brak uwag" in ls:
+                continue
+
+            # Usuń prefix listy (- [ ], - )
+            clean = re.sub(r"^[-*]\s*\[.\]\s*", "", ls)
+            clean = re.sub(r"^[-*]\s*", "", clean).strip()
+
+            if clean and len(clean) > 5:
                 notes.append(
                     {
                         "project_number": project_number,
                         "project_folder": project_folder,
                         "position": "GENERAL",
                         "system": "ALL",
-                        "note": line,
-                        "status": "extracted",
+                        "hardware_code": None,
+                        "note": clean,
+                        "source_type": "uwagi_section",
                         "date_extracted": datetime.datetime.now().strftime("%d.%m.%Y"),
                         "source_file": md_file_path,
                     }
                 )
+
+    # ==========================================
+    # WZORZEC 2: Tabelka — kolumna Uwagi
+    # ==========================================
+    for line in lines:
+        ls = line.strip()
+        if ls.startswith("|") and "|" in ls:
+            cols = [c.strip() for c in ls.split("|") if c.strip()]
+            # Potrzebujemy min. 6 kolumn (Kod, Opis, Rysunek, Katalog, Status, Uwagi)
+            if len(cols) >= 6:
+                code = cols[0].strip("`")
+                uwagi = cols[-1].strip()
+
+                # Wyczyść z emoji
+                clean_u = re.sub(r"[🔴✅📐]", "", uwagi).strip()
+
+                # Sprawdź czy to nie jest puste lub placeholder
+                if (
+                    clean_u
+                    and len(clean_u) > 3
+                    and clean_u not in ["—", "", "Brak", "N/A"]
+                ):
+                    notes.append(
+                        {
+                            "project_number": project_number,
+                            "project_folder": project_folder,
+                            "position": "UNKNOWN",
+                            "system": "UNKNOWN",
+                            "hardware_code": code,
+                            "note": clean_u,
+                            "source_type": "table_uwagi",
+                            "date_extracted": datetime.datetime.now().strftime(
+                                "%d.%m.%Y"
+                            ),
+                            "source_file": md_file_path,
+                        }
+                    )
+
+    # ==========================================
+    # WZORZEC 3: Placeholdery
+    # ==========================================
+    for match in re.finditer(r"__BALOON_NOTES_PLACEHOLDER__POZ_(\w+)__", content):
+        notes.append(
+            {
+                "project_number": project_number,
+                "project_folder": project_folder,
+                "position": f"Poz_{match.group(1)}",
+                "note": "[Uwaga do wypełnienia]",
+                "source_type": "placeholder",
+                "date_extracted": datetime.datetime.now().strftime("%d.%m.%Y"),
+                "source_file": md_file_path,
+            }
+        )
 
     return notes
 
@@ -161,18 +177,12 @@ def extract_notes_from_markdown(md_file_path: str) -> List[Dict]:
 def extract_project_number(md_file_path: str) -> str:
     """
     Wyciąga numer projektu z ścieżki lub nazwy pliku.
-
-    Przykłady:
-    - .../P241031_BMEIA/file.md → P241031
-    - .../Projekt_P241031/file.md → P241031
     """
-    # Spróbuj z nazwy folderu
     folder_name = os.path.basename(os.path.dirname(md_file_path))
     match = re.search(r"\b(P\d{5,6})\b", folder_name)
     if match:
         return match.group(1)
 
-    # Spróbuj z nazwy pliku
     file_name = os.path.basename(md_file_path)
     match = re.search(r"\b(P\d{5,6})\b", file_name)
     if match:
@@ -192,13 +202,6 @@ def scan_projects_for_notes(
 ) -> List[Dict]:
     """
     Skanuje foldery projektów w poszukiwaniu plików .md z uwagami.
-
-    Args:
-        base_path: ścieżka bazowa (domyślnie DOCUMENTATION_PROJECTS_PATH)
-        recursive: czy szukać rekurencyjnie
-
-    Returns:
-        Lista wszystkich znalezionych uwag
     """
     if base_path is None:
         base_path = DOCUMENTATION_PROJECTS_PATH
@@ -225,7 +228,6 @@ def scan_projects_for_notes(
 
     print(f"📄 Znaleziono {len(md_files)} plików .md")
 
-    # Ekstrahuj uwagi z każdego pliku
     for md_file in md_files:
         notes = extract_notes_from_markdown(md_file)
         all_notes.extend(notes)
@@ -241,12 +243,7 @@ def scan_projects_for_notes(
 
 
 def load_uwagi_db() -> List[Dict]:
-    """
-    Ładuje bazę uwag z pliku JSON.
-
-    Returns:
-        Lista uwag lub pusta lista jeśli plik nie istnieje
-    """
+    """Ładuje bazę uwag z pliku JSON."""
     if not os.path.exists(UWAGI_DB_PATH):
         return []
 
@@ -259,15 +256,7 @@ def load_uwagi_db() -> List[Dict]:
 
 
 def save_uwagi_db(notes: List[Dict]) -> bool:
-    """
-    Zapisuje bazę uwag do pliku JSON.
-
-    Args:
-        notes: lista uwag do zapisania
-
-    Returns:
-        True jeśli zapisano sukcesem
-    """
+    """Zapisuje bazę uwag do pliku JSON."""
     try:
         ensure_data_dir()
         with open(UWAGI_DB_PATH, "w", encoding="utf-8") as f:
@@ -282,17 +271,9 @@ def save_uwagi_db(notes: List[Dict]) -> bool:
 def merge_uwagi_db(new_notes: List[Dict], update_existing: bool = True) -> int:
     """
     Scal nowe uwagi z istniejącą bazą.
-
-    Args:
-        new_notes: nowe uwagi do dodania
-        update_existing: czy aktualizować istniejące uwagi
-
-    Returns:
-        Liczba dodanych/zaktualizowanych uwag
     """
     existing = load_uwagi_db()
 
-    # Tworzymy indeks istniejących uwag
     existing_index = {}
     for i, note in enumerate(existing):
         key = (
@@ -312,15 +293,12 @@ def merge_uwagi_db(new_notes: List[Dict], update_existing: bool = True) -> int:
         )
 
         if key in existing_index:
-            # Uwaga już istnieje
             if update_existing:
                 idx = existing_index[key]
-                # Aktualizuj datę i status
                 existing[idx]["date_extracted"] = new_note["date_extracted"]
                 existing[idx]["source_file"] = new_note["source_file"]
                 updated_count += 1
         else:
-            # Nowa uwaga
             existing.append(new_note)
             updated_count += 1
 
@@ -334,15 +312,7 @@ def merge_uwagi_db(new_notes: List[Dict], update_existing: bool = True) -> int:
 
 
 def export_uwagi_to_csv(output_path: str = None) -> Optional[str]:
-    """
-    Eksportuje bazę uwag do pliku CSV.
-
-    Args:
-        output_path: ścieżka wyjściowa (domyślnie data/uwagi_export.csv)
-
-    Returns:
-        Ścieżka do wyeksportowanego pliku
-    """
+    """Eksportuje bazę uwag do pliku CSV."""
     import csv
 
     notes = load_uwagi_db()
@@ -358,8 +328,9 @@ def export_uwagi_to_csv(output_path: str = None) -> Optional[str]:
         "project_folder",
         "position",
         "system",
+        "hardware_code",
         "note",
-        "status",
+        "source_type",
         "date_extracted",
         "source_file",
     ]
@@ -378,40 +349,26 @@ def export_uwagi_to_csv(output_path: str = None) -> Optional[str]:
 
 
 def get_uwagi_summary() -> Dict[str, Any]:
-    """
-    Zwraca podsumowanie bazy uwag.
-
-    Returns:
-        Dict ze statystykami
-    """
+    """Zwraca podsumowanie bazy uwag."""
     notes = load_uwagi_db()
 
     if not notes:
         return {"total": 0}
 
-    # Grupowanie po statusie
     by_status = {}
     for note in notes:
-        status = note.get("status", "unknown")
+        status = note.get("source_type", "unknown")
         by_status[status] = by_status.get(status, 0) + 1
 
-    # Grupowanie po projekcie
     by_project = {}
     for note in notes:
         proj = note.get("project_number", "UNKNOWN")
         by_project[proj] = by_project.get(proj, 0) + 1
 
-    # Grupowanie po pozycji
-    by_position = {}
-    for note in notes:
-        pos = note.get("position", "UNKNOWN")
-        by_position[pos] = by_position.get(pos, 0) + 1
-
     return {
         "total": len(notes),
-        "by_status": by_status,
+        "by_source_type": by_status,
         "by_project": by_project,
-        "by_position": by_position,
         "last_extracted": (
             max(n.get("date_extracted", "") for n in notes) if notes else None
         ),
@@ -419,14 +376,12 @@ def get_uwagi_summary() -> Dict[str, Any]:
 
 
 # ==========================================
-# CLI — INTERFEJS LINII POLECEŃ
+# CLI
 # ==========================================
 
 
 def cli_harvest() -> None:
-    """
-    Tryb CLI: Skanuj projekty i zaktualizuj bazę uwag.
-    """
+    """Tryb CLI: Skanuj projekty i zaktualizuj bazę uwag."""
     print("🔍 Note Harvester — Skanowanie projektów...")
     print("=" * 50)
 
@@ -437,35 +392,28 @@ def cli_harvest() -> None:
         return
 
     print(f"\n📊 Znaleziono {len(notes)} uwag")
-
     merged = merge_uwagi_db(notes)
     print(f"✅ Zaktualizowano bazę: {merged} zmian")
 
-    # Podsumowanie
     summary = get_uwagi_summary()
     print("\n📋 Podsumowanie:")
     print(f"  Total: {summary.get('total', 0)}")
-    print(f"  Po statusie: {summary.get('by_status', {})}")
-    print(f"  Ostatnia ekstrakcja: {summary.get('last_extracted', 'N/A')}")
+    print(f"  Po źródle: {summary.get('by_source_type', {})}")
+    print(f"  Po projektach: {summary.get('by_project', {})}")
 
 
 def cli_export() -> None:
-    """
-    Tryb CLI: Eksportuj bazę uwag do CSV.
-    """
+    """Tryb CLI: Eksportuj bazę uwag do CSV."""
     print("📊 Note Harvester — Eksport do CSV...")
     print("=" * 50)
 
     output_path = export_uwagi_to_csv()
-
     if output_path:
         print(f"✅ Wyeksportowano do: {output_path}")
 
 
 def cli_summary() -> None:
-    """
-    Tryb CLI: Pokaż podsumowanie bazy uwag.
-    """
+    """Tryb CLI: Pokaż podsumowanie bazy uwag."""
     print("📋 Note Harvester — Podsumowanie...")
     print("=" * 50)
 
@@ -476,20 +424,12 @@ def cli_summary() -> None:
         return
 
     print(f"Total uwag: {summary.get('total', 0)}")
-    print(f"Po statusie: {summary.get('by_status', {})}")
+    print(f"Po źródle: {summary.get('by_source_type', {})}")
     print(f"Po projektach: {summary.get('by_project', {})}")
-    print(f"Ostatnia ekstrakcja: {summary.get('last_extracted', 'N/A')}")
-
-
-# ==========================================
-# MAIN
-# ==========================================
 
 
 def main():
-    """
-    Główna funkcja CLI.
-    """
+    """Główna funkcja CLI."""
     import sys
 
     if len(sys.argv) < 2:
