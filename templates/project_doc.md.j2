@@ -5,22 +5,18 @@ puppeteer:
 ---
 
 <style>
-    /* Wymuś drukowanie tła */
     * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
     }
-
     th {
-        background-color: #393c3f !important; /* Twój kolor */
+        background-color: #393c3f !important;
         color: #ffffff !important;
         font-weight: bold;
         text-align: center;
         padding: 8px;
     }
 </style>
-
----
 
 <img src="{{ logo_path }}" alt="Logo" style="display: block; margin: 0 auto; width: 200px;">
 
@@ -36,20 +32,21 @@ puppeteer:
 
 # Spis Treści
 - [Dokumentacja](#dokumentacja)
+- [UWAGI Ogólne](#uwagi-ogólne)
 - [📚 Katalogi Systemowe](#-katalogi-systemowe)
 - [🔩 Tabela Okuć i Akcesoriów](#-tabela-okuć-i-akcesoriów)
 {% for system_name in systems %}
 - [{{ system_name }}](#{{ system_name | lower | replace(' ', '-') }})
 {% endfor %}
+- [📋 Historia Zmian](#-historia-zmian)
 
 ---
 
-# <h id="dokumentacja" style="color:WHITE">Dokumentacja</span>
+# <h id="dokumentacja" style="color:WHITE">Dokumentacja</h>
 
 [⬆️ Spis Treści](#spis-treści)
 
 ## Dokumenty Sieciowe (Z:\)
-
 <div style="page-break-inside: avoid;">
 
 | Dokument | Data | Link |
@@ -61,7 +58,6 @@ puppeteer:
 ---
 
 ## Dokumenty Lokalne (C:\)
-
 <div style="page-break-inside: avoid;">
 
 | Dokument | Data | Link |
@@ -71,6 +67,12 @@ puppeteer:
 </div>
 
 ---
+
+# <h id="uwagi-ogólne" style="color:ORANGE">UWAGI Ogólne</h>
+
+[⬆️ Spis Treści](#spis-treści)
+
+- [ ]
 
 ---
 
@@ -105,7 +107,7 @@ puppeteer:
 
 ---
 
-### 📖 Instrukcje montażowe
+# 📖 Instrukcje montażowe
 
 [⬆️ Spis Treści](#spis-treści)
 
@@ -119,14 +121,13 @@ puppeteer:
 
 </div>
 
----
-
 <div style="page-break-before: always;"></div>
 
 {# --- PĘTLA PO SYSTEMACH --- #}
 {% for system_name, positions in systems_data.items() %}
 
 # <h id="{{ system_name | lower | replace(' ', '-') }}" style="color:GOLD">{{ system_name }}</h>
+<div style="text-align:center; color: gold; font-size: 0.8em; margin: -20px 0 10px 0;"> ▲ {{ system_name }} ▲ </div>
 
 ---
 
@@ -138,23 +139,18 @@ puppeteer:
 ---
 
 ### Rzut
-
-[⬆️ Spis Treści](#spis-treści)
-
 ![]({{ pos.view_image_path }})
 
 ---
 
 ### <h id="profile-{{ pos.number }}" style="color:MAGENTA">Profile</h>
 
-[⬆️ Spis Treści](#spis-treści)
-
 <div style="page-break-inside: avoid;">
 
 | Kod | Opis | Rysunek | Ilość | Wymiary | Położenie |
 | :--- | :--- | :---: | :---: | :---: | :---: |
 {% for prof in pos.profiles -%}
-| {{ prof.code }} | {{ prof.desc }} | ![]({{ prof.image_path }}) | {{ prof.quantity }} | {{ prof.dimensions }} | {{ prof.location }} |
+| {% if prof.quantity %}**`{{ prof.code }}`**{% else %}`{{ prof.code }}`{% endif %} | {{ prof.desc }} | ![]({{ prof.image_path }}) | {{ prof.quantity }} | {{ prof.dimensions | format_dim }} | {{ prof.location }} |
 {% endfor %}
 
 </div>
@@ -163,24 +159,20 @@ puppeteer:
 
 ### <h id="obrobki-{{ pos.number }}" style="color:RED">Obróbki</h>
 
-[⬆️ Spis Treści](#spis-treści)
-
 | Kod | Opis | Rysunek | Ilość | Katalog | Status |
 | :--: | :-- | :--: | :--: | :--: | :--: |
 {% for hw in pos.hardware -%}
-| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | {{ hw.status_icon }} {{ hw.status_text }} |
+| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | <span title="{{ hw.status_text }}">{{ hw.status_icon }}</span> |
 {% endfor %}
 
 ---
 
 ### Checklista Poz. {{ pos.number }}
 
-[⬆️ Spis Treści](#spis-treści)
-
-| ✓ | Kod | Opis | Ilość | Katalog |
-| :--: | :--: | :--: | :-- | :--: |
+| ✓ | Kod | Opis | Ilość | Status | Katalog |
+| :--: | :--: | :--: | :-- | :--: | :--: |
 {% for hw in pos.hardware -%}
-| <input type="checkbox"> | `{{ hw.code }}` | {{ hw.desc }} | {{ hw.quantity }} | [📄 Otwórz](#checklist-{{ hw.code }}-{{ pos.number }}) |
+| <input type="checkbox"> | `{{ hw.code }}` | {{ hw.desc }} | {{ hw.quantity }} | {% set qty = hw.quantity.split()[0] | int %}{% if qty > 10 %}🔴{% elif qty > 5 %}🟡{% else %}🟢{% endif %} | [📄](#checklist-{{ hw.code }}-{{ pos.number }}) |
 {% endfor %}
 
 ---
@@ -194,7 +186,11 @@ puppeteer:
 
         {% endfor %}
 
-[⬆️ Spis Treści](#spis-treści)
+---
+
+### <h id="uwagi-do-obróbek-{{ pos.number }}" style="color:ORANGE">UWAGI do Obróbek</h>
+
+- [ ] Brak Uwag
 
 ---
 
@@ -208,10 +204,21 @@ puppeteer:
 
 ---
 
+# 📋 Historia Zmian
+
+[⬆️ Spis Treści](#spis-treści)
+
+| Wersja | Data | Sporządził |
+| :--: | :--: | :-- |
+{% for entry in version_history | reverse %}| v{{ entry.version }} | {{ entry.date }} | {{ entry.author }} |
+{% endfor %}
+
+---
+
 <div style="page-break-before: auto;"></div>
 
 | | |
 | :-- | :-- |
-| **Dokumentacja:** | v1.0 — {{ generation_date }} |
+| **Dokumentacja:** | v{{ doc_version }} — {{ generation_date }} |
 | **Sporządził:** | {{ author }} |
 | **Źródła:** | [📄 Dokumentacja](#dokumentacja) |
