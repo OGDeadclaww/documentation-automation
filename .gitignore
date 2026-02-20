@@ -27,6 +27,7 @@ audit_log.jsonl
 
 # Backup
 *_BACKUP_*.py
+.bak
 
 # OS
 .DS_Store
