@@ -385,6 +385,9 @@ def _find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
 
     sys_normalized = _normalize(sys_name)
 
+    special_marks = ["bp", "ei", "dpa"]
+    found_special = [m for m in special_marks if m in sys_normalized]
+
     print(f"🔍 Szukam katalogu dla: '{sys_name}' (znorm: '{sys_normalized}')")
     print(f"   Pliki PDF w {catalog_dir}: {[os.path.basename(p) for p in all_pdfs]}")
 
@@ -394,30 +397,31 @@ def _find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
         filename = os.path.basename(pdf_path)
         filename_normalized = _normalize(filename)
 
-        # Poziom 1: sys_name na początku nazwy pliku
-        if filename_normalized.startswith(sys_normalized):
-            matches.append((pdf_path, 1))
-            print(f"   ✅ Poziom 1 (prefix): {filename}")
-            continue
+        # WAGA (score): Im niższa, tym lepszy mecz
+        score = 10
 
-        # Poziom 2: sys_name gdziekolwiek w nazwie
-        if sys_normalized in filename_normalized:
-            matches.append((pdf_path, 2))
-            print(f"   ✅ Poziom 2 (contains): {filename}")
-            continue
+        # 1. Dokładne dopasowanie (po normalizacji)
+        if sys_normalized == filename_normalized:
+            score = 1
+        # 2. System z oznaczeniem specjalnym (np. szukamy CS77BP i plik ma BP)
+        elif found_special and any(m in filename_normalized for m in found_special):
+            if sys_normalized in filename_normalized:
+                score = 2  # Bardzo wysoki priorytet dla BP/EI
+        # 3. Zwykły prefix
+        elif filename_normalized.startswith(sys_normalized):
+            score = 3
+        # 4. Zawiera nazwę
+        elif sys_normalized in filename_normalized:
+            score = 4
 
-        # Poziom 3: sys_name bez cyfr (np. "masterline" w "masterline8")
-        sys_no_digits = re.sub(r"\d", "", sys_normalized)
-        if len(sys_no_digits) >= 3 and sys_no_digits in filename_normalized:
-            matches.append((pdf_path, 3))
-            print(f"   ✅ Poziom 3 (no-digits): {filename}")
-            continue
+        if score < 10:
+            matches.append((pdf_path, score))
 
     if not matches:
         print(f"⚠️ Brak katalogu dla systemu '{sys_name}'")
         return None
 
-    # Sortuj: priorytet (1 najlepszy) + najnowsza data
+    # Sortujemy po wyniku (score), a potem po dacie (najnowsze)
     def _extract_date(filepath: str) -> datetime.datetime:
         name = os.path.basename(filepath)
 
@@ -452,12 +456,14 @@ def _find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
 
     # Wybierz najlepszy: najpierw najwyższy priorytet, potem najnowszy
     matches.sort(key=lambda x: (x[1], -_extract_date(x[0]).timestamp()))
-    best_path, best_level = matches[0]
+    best_path, best_score = matches[0]
 
     date_obj = _extract_date(best_path)
     date_str = date_obj.strftime("%d.%m.%Y")
 
-    print(f"✅ Wybrany katalog: {os.path.basename(best_path)} (poziom {best_level})")
+    print(
+        f"✅ Wybrany katalog: {os.path.basename(best_path)} (z score {best_score}, data {date_str})"
+    )
 
     # Status zależy od świeżości
     status_icon, status_text = _get_catalog_status(date_obj)
