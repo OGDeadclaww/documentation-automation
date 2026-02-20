@@ -4,7 +4,7 @@ Testy parsowania kodów profili i okuć.
 """
 
 import pytest
-from vendors import AluProfProfile, clean, VENDOR_PROFILES, ReynaersProfile
+from parsers.vendors import AluProfProfile, clean, VENDOR_PROFILES, ReynaersProfile
 
 # ============================================
 # TESTY clean()

@@ -7,8 +7,8 @@ import datetime
 from jinja2 import Environment, FileSystemLoader
 
 # Importy z Twoich modułów
-from vendors import get_vendor_by_key
-from csv_parser import (
+from parsers.vendors import get_vendor_by_key
+from parsers.csv_parser import (
     get_positions_with_systems,
     get_data_for_position,
 )
@@ -21,8 +21,8 @@ from config import (
     RELATIVE_DEPTH_TO_BASE,
     AUTHOR_NAME,
 )
-from gui import select_file, select_folder, select_vendor
-from db_builder import build_product_db
+from gui.gui import select_file, select_folder, select_vendor
+from parsers.db_builder import build_product_db
 
 
 # ==========================================
