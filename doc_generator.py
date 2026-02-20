@@ -561,7 +561,7 @@ def _strip_date_from_folder_name(folder_name: str) -> str:
     return cleaned
 
 
-def render_markdown(context, output_filename=None):
+def render_markdown(context: dict, output_filename: str = None):
     """Renderuje szablon Jinja2 do pliku MD w folderze projektu."""
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
     try:
@@ -570,30 +570,98 @@ def render_markdown(context, output_filename=None):
         print(f"❌ Błąd ładowania szablonu: {e}")
         return
 
-    rendered = template.render(context)
-
+    # Nazwa pliku MD
     if output_filename is None:
         proj_folder = context.get("project_folder_name", "Dokumentacja")
-        clean_name = _strip_date_from_folder_name(proj_folder)
+        clean_name = re.sub(r"^\d{4}[-.]\d{2}[-.]\d{2}[_ ]?", "", proj_folder).strip()
         output_filename = f"{clean_name}.md"
 
     proj_folder_name = context.get("project_folder_name", "projekt")
     out_dir = os.path.join(DOCUMENTATION_PROJECTS_PATH, proj_folder_name)
     os.makedirs(out_dir, exist_ok=True)
-
     out_path = os.path.join(out_dir, output_filename)
+
+    # Wylicz wersję PRZED renderowaniem
+    version = _get_next_version(out_path, context.get("project_number", "UNKNOWN"))
+
+    # Dodaj wersję do kontekstu (dla szablonu)
+    context["doc_version"] = version
+
+    rendered = template.render(context)
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(rendered)
 
-    print(f"✅ Wygenerowano dokumentację: {os.path.abspath(out_path)}")
-    print(f"📄 Nazwa pliku: {output_filename}")
-    _update_project_index(context)
+    print(f"✅ Wygenerowano: {os.path.abspath(out_path)} (v{version})")
+
+    # Przekaż wersję do indeksu
+    _update_project_index(context, version)
 
 
 # ==========================================
 # MODUŁY POMOCNICZE (Data Providers)
 # ==========================================
+
+
+def _get_next_version(
+    md_output_path: str,
+    project_number: str,
+) -> str:
+    """
+    Wylicza następną wersję dokumentacji.
+
+    Logika:
+    - Plik MD nie istnieje → v1.0 (nowy projekt)
+    - Plik MD istnieje + wersja w JSON zaczyna się od 1.x → v2.0
+    - Plik MD istnieje + wersja >= 2.x → bump minor (2.0→2.1→2.2)
+
+    Args:
+        md_output_path: pełna ścieżka do pliku MD
+        project_number: numer projektu (klucz w project_index.json)
+
+    Returns:
+        str: np. "1.0", "2.0", "2.1"
+    """
+    index_path = os.path.join(DOCUMENTATION_PROJECTS_PATH, "project_index.json")
+
+    # Odczytaj aktualną wersję z JSON
+    current_version = None
+    if os.path.exists(index_path):
+        try:
+            with open(index_path, "r", encoding="utf-8") as f:
+                index = json.load(f)
+            current_version = index.get(project_number, {}).get("version", None)
+        except (json.JSONDecodeError, KeyError):
+            current_version = None
+
+    # Plik MD nie istnieje → zawsze v1.0
+    if not os.path.exists(md_output_path):
+        print("📄 Nowy plik MD → v1.0")
+        return "1.0"
+
+    # Plik MD istnieje ale brak wersji w JSON → v2.0
+    if current_version is None:
+        print("📄 Plik MD istnieje, brak wersji w JSON → v2.0")
+        return "2.0"
+
+    # Parsuj aktualną wersję
+    try:
+        parts = current_version.split(".")
+        major = int(parts[0])
+        minor = int(parts[1])
+    except (ValueError, IndexError):
+        print(f"⚠️ Nie można sparsować wersji '{current_version}' → v2.0")
+        return "2.0"
+
+    # Wersja 1.x + plik istnieje → v2.0 (ręczna edycja → nowa major)
+    if major == 1:
+        print(f"📄 Wersja {current_version} + plik istnieje → v2.0")
+        return "2.0"
+
+    # Wersja 2.x+ → bump minor
+    next_version = f"{major}.{minor + 1}"
+    print(f"📄 Bump minor: {current_version} → {next_version}")
+    return next_version
 
 
 def _get_view_for_position(project_name, pos_num):
@@ -1199,7 +1267,10 @@ def _build_hardware_catalog_link(
 # ==========================================
 
 
-def _update_project_index(context):
+def _update_project_index(context: dict, version: str):
+    """
+    Aktualizuje indeks projektów + zapisuje wersję i historię.
+    """
     index_path = os.path.join(DOCUMENTATION_PROJECTS_PATH, "project_index.json")
 
     if os.path.exists(index_path):
@@ -1213,6 +1284,18 @@ def _update_project_index(context):
 
     proj_num = context["project_number"] or "UNKNOWN"
 
+    # Historia wersji
+    history_entry = {
+        "version": version,
+        "date": context["generation_date"],
+        "author": context["author"],
+    }
+
+    existing = index.get(proj_num, {})
+    version_history = existing.get("version_history", [])
+    version_history.append(history_entry)
+
+    # Reszta logiki (usage_by_system, stats) bez zmian
     usage_by_system = {}
     all_hardware = set()
     all_profiles = set()
@@ -1243,6 +1326,8 @@ def _update_project_index(context):
         "desc": context["project_desc"],
         "folder": context["project_folder_name"],
         "systems": context["systems"],
+        "version": version,  # ← AKTUALNA WERSJA
+        "version_history": version_history,  # ← HISTORIA
         "stats": {
             "hardware_count": len(all_hardware),
             "profiles_count": len(all_profiles),
@@ -1253,7 +1338,7 @@ def _update_project_index(context):
     try:
         with open(index_path, "w", encoding="utf-8") as f:
             json.dump(index, f, indent=2, ensure_ascii=False)
-        print(f"💾 Zaktualizowano indeks projektów: {index_path}")
+        print(f"💾 Zaktualizowano indeks: v{version}")
     except Exception as e:
         print(f"⚠️ Nie udało się zapisać indeksu: {e}")
 
