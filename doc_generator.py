@@ -341,6 +341,12 @@ def _get_catalog_status(date_obj: datetime.datetime) -> tuple[str, str]:
 def _find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
     """
     Szuka katalogu systemowego PDF dla danego dostawcy i systemu.
+
+    Logika dopasowania (od najbardziej precyzyjnej):
+    1. Nazwa pliku zaczyna się od sys_name (np. mb-77hs_data.pdf)
+    2. Nazwa pliku zawiera sys_name (np. PP_AD089_CS77_2022.pdf)
+    3. Nazwa pliku zawiera sys_name bez separatorów (np. masterline8)
+
     Status zależy od świeżości (3msc/6msc).
     """
     vendor_folder = VENDOR_CATALOG_FOLDERS.get(vendor_key)
@@ -352,25 +358,69 @@ def _find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
         print(f"⚠️ Brak folderu katalogów: {catalog_dir}")
         return None
 
-    sys_lower = sys_name.lower()
-
-    # Szukaj plików pasujących do systemu
-    pattern = os.path.join(catalog_dir, f"{sys_lower}*.pdf")
-    matches = glob.glob(pattern, recursive=False)
-
-    # Jeśli brak wyników — spróbuj bez separatora (tolerancja nazw)
-    if not matches:
-        all_pdfs = glob.glob(os.path.join(catalog_dir, "*.pdf"))
-        matches = [p for p in all_pdfs if sys_lower in os.path.basename(p).lower()]
-
-    if not matches:
-        print(f"⚠️ Brak katalogu dla systemu '{sys_name}' w {catalog_dir}")
+    # Pobierz wszystkie PDF z folderu dostawcy
+    try:
+        all_pdfs = [
+            os.path.join(catalog_dir, f)
+            for f in os.listdir(catalog_dir)
+            if f.lower().endswith(".pdf")
+            and os.path.isfile(os.path.join(catalog_dir, f))
+        ]
+    except PermissionError:
+        print(f"⚠️ Brak dostępu do: {catalog_dir}")
         return None
 
-    # Wybierz najnowszy (po dacie w nazwie lub modyfikacji)
-    def _extract_date(filepath):
+    if not all_pdfs:
+        print(f"⚠️ Brak plików PDF w: {catalog_dir}")
+        return None
+
+    # Normalizuj sys_name do szukania
+    # Przykłady:
+    #   "MASTERLINE-8" → "masterline8"
+    #   "CS-77"        → "cs77"
+    #   "MB-70"        → "mb70"
+    def _normalize(text: str) -> str:
+        return re.sub(r"[\s\-_.]", "", text).lower()
+
+    sys_normalized = _normalize(sys_name)
+
+    print(f"🔍 Szukam katalogu dla: '{sys_name}' (znorm: '{sys_normalized}')")
+    print(f"   Pliki PDF w {catalog_dir}: {[os.path.basename(p) for p in all_pdfs]}")
+
+    matches = []
+
+    for pdf_path in all_pdfs:
+        filename = os.path.basename(pdf_path)
+        filename_normalized = _normalize(filename)
+
+        # Poziom 1: sys_name na początku nazwy pliku
+        if filename_normalized.startswith(sys_normalized):
+            matches.append((pdf_path, 1))
+            print(f"   ✅ Poziom 1 (prefix): {filename}")
+            continue
+
+        # Poziom 2: sys_name gdziekolwiek w nazwie
+        if sys_normalized in filename_normalized:
+            matches.append((pdf_path, 2))
+            print(f"   ✅ Poziom 2 (contains): {filename}")
+            continue
+
+        # Poziom 3: sys_name bez cyfr (np. "masterline" w "masterline8")
+        sys_no_digits = re.sub(r"\d", "", sys_normalized)
+        if len(sys_no_digits) >= 3 and sys_no_digits in filename_normalized:
+            matches.append((pdf_path, 3))
+            print(f"   ✅ Poziom 3 (no-digits): {filename}")
+            continue
+
+    if not matches:
+        print(f"⚠️ Brak katalogu dla systemu '{sys_name}'")
+        return None
+
+    # Sortuj: priorytet (1 najlepszy) + najnowsza data
+    def _extract_date(filepath: str) -> datetime.datetime:
         name = os.path.basename(filepath)
-        # Szukaj wzorca DD.MM.YYYY w nazwie
+
+        # Pattern: DD.MM.YYYY
         m = re.search(r"(\d{2})\.(\d{2})\.(\d{4})", name)
         if m:
             try:
@@ -379,17 +429,40 @@ def _find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
                 )
             except ValueError:
                 pass
+
+        # Pattern: MM_YYYY lub MM.YYYY (np. 04_2022)
+        m = re.search(r"(\d{2})[._](\d{4})", name)
+        if m:
+            try:
+                return datetime.datetime(int(m.group(2)), int(m.group(1)), 1)
+            except ValueError:
+                pass
+
+        # Pattern: YYYY (rok w nazwie)
+        m = re.search(r"(20\d{2})", name)
+        if m:
+            try:
+                return datetime.datetime(int(m.group(1)), 1, 1)
+            except ValueError:
+                pass
+
+        # Fallback: data modyfikacji pliku
         return datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
 
-    best = max(matches, key=_extract_date)
-    date_obj = _extract_date(best)
+    # Wybierz najlepszy: najpierw najwyższy priorytet, potem najnowszy
+    matches.sort(key=lambda x: (x[1], -_extract_date(x[0]).timestamp()))
+    best_path, best_level = matches[0]
+
+    date_obj = _extract_date(best_path)
     date_str = date_obj.strftime("%d.%m.%Y")
+
+    print(f"✅ Wybrany katalog: {os.path.basename(best_path)} (poziom {best_level})")
 
     # Status zależy od świeżości
     status_icon, status_text = _get_catalog_status(date_obj)
 
     # Relatywna ścieżka do katalogu
-    best_norm = best.replace("\\", "/")
+    best_norm = best_path.replace("\\", "/")
     catalogs_norm = CATALOGS_PATH.replace("\\", "/")
 
     if best_norm.lower().startswith(catalogs_norm.lower()):
@@ -861,8 +934,8 @@ def _scan_project_documents(
 ) -> list[dict]:
     """
     Skanuje folder projektu — zwraca dokumenty z podziałem:
-    - type='network_local':  LP/LC/DWG — link lokalny (C:\)
-    - type='network_remote': LP/LC/DWG — link sieciowy (Z:\)
+    - type='network_local':  LP/LC/DWG — link lokalny (C:\\)
+    - type='network_remote': LP/LC/DWG — link sieciowy (Z:\\)
     - type='local_only':     .met/.rey/.ali — link lokalny
     """
     if not doc_folder or not os.path.isdir(doc_folder):
