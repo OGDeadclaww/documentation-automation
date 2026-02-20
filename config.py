@@ -14,6 +14,29 @@ BASE_PATH = r"Z:\Pawel_Pisarski\Dokumentacja"
 PROJECTS_IMAGES = os.path.join(BASE_PATH, "projects_images")
 IMAGES_DB = os.path.join(BASE_PATH, "images_db")
 
+# Katalogi systemowe (PDF)
+CATALOGS_PATH = r"Z:\Pawel_Pisarski\Katalogi"
+
+# Zlecenia — lokalna kopia robocza
+ZLECENIA_LOCAL = r"C:\Users\pawel\Desktop\Zlecenia"
+
+# Zlecenia — kopia sieciowa
+ZLECENIA_NETWORK = r"Z:\Pawel_Pisarski\Zlecenia"
+
+# Pliki JOB
+JOB_PATH_LOCAL = r"C:\JOB\Lotti"
+JOB_PATH_NETWORK = r"Z:\JOB\Lotti"
+
+# Dokumentacja wyjściowa (MD powstaje tutaj)
+DOCUMENTATION_PROJECTS_PATH = r"Z:\Pawel_Pisarski\Dokumentacja\projects"
+
+# Głębokość relatywna z folderu projektu do Pawel_Pisarski/
+# projects/FOLDER_PROJEKTU/Dokumentacja.md
+# ../   = projects/
+# ../../ = Dokumentacja/
+# ../../../ = Pawel_Pisarski/
+RELATIVE_DEPTH_TO_BASE = "../../.."
+
 # Będzie ustawione dynamicznie w main()
 OUTPUT_VIEWS_DIR = None
 OUTPUT_PROFILES_DIR = None
@@ -78,3 +101,11 @@ KNOWN_SYSTEMS = [
     "smart",
     "genesis",
 ]
+
+# Końcówki, które nie zmieniają bazy katalogowej systemu
+IGNORED_SYSTEM_SUFFIXES = ["SI", "ST"]
+
+# ============================================
+# AUTOR PEŁNE ID (dla dokumentacji)
+# ============================================
+AUTHOR_NAME = "Paweł Pisarski"
