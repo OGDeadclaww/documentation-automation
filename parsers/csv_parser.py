@@ -1,8 +1,8 @@
 # csv_parser.py
 import re
 import csv
-from vendors import clean
-from db_builder import normalize_key
+from parsers.vendors import clean
+from parsers.db_builder import normalize_key
 
 POZ_LINE_RE = re.compile(r"Poz\.\s*(\d+)")
 SYSTEM_KEYWORDS = ["MB-", "MasterLine", "CS-", "CP-", "SlimLine", "Hi-Finity"]

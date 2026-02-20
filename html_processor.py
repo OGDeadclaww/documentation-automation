@@ -11,7 +11,7 @@ from collections import defaultdict
 from bs4 import BeautifulSoup
 
 from config import PREFERRED_EXT_ORDER, CONFLICTS_DIR, ENABLE_CONFLICT_MODE
-from vendors import clean
+from parsers.vendors import clean
 
 # ============================================
 # UTILITY PLIKOWE

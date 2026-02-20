@@ -2,9 +2,9 @@
 
 # Importy z Twojego projektu
 from gui import select_file
-from vendors import get_vendor_by_key
-from db_builder import build_product_db
-from csv_parser import get_data_for_position
+from parsers.vendors import get_vendor_by_key
+from parsers.db_builder import build_product_db
+from parsers.csv_parser import get_data_for_position
 
 
 def run_debug():
