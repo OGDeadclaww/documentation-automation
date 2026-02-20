@@ -8,10 +8,8 @@ Zawiera logikę:
 - czyszczenia nazw systemów
 """
 
-import os
 import json
-from typing import Dict, List
-
+import os
 
 # ==========================================
 # KONFIGURACJA
@@ -53,7 +51,7 @@ def get_next_version(md_output_path: str, project_number: str) -> str:
     current_version = None
     if os.path.exists(index_path):
         try:
-            with open(index_path, "r", encoding="utf-8") as f:
+            with open(index_path, encoding="utf-8") as f:
                 index = json.load(f)
             current_version = index.get(project_number, {}).get("version", None)
         except (json.JSONDecodeError, KeyError):
@@ -102,17 +100,20 @@ def get_clean_system_name(raw_name: str) -> str:
     if not raw_name:
         return "UNKNOWN"
 
-    parts = raw_name.split()
+    # Najpierw usuń całe słowa które są suffixami
+    words = raw_name.split()
+    filtered_words = [w for w in words if w.upper() not in IGNORED_SYSTEM_SUFFIXES]
+
+    # Potem sprawdź części wewnątrz słów
     clean_parts = []
-
-    for p in parts:
+    for p in filtered_words:
         sub_parts = p.split("-")
-        filtered_sub = [
-            sp for sp in sub_parts if sp.upper() not in IGNORED_SYSTEM_SUFFIXES
-        ]
-        clean_parts.append("-".join(filtered_sub))
+        filtered_sub = [sp for sp in sub_parts if sp.upper() not in IGNORED_SYSTEM_SUFFIXES]
+        if filtered_sub:
+            clean_parts.append("-".join(filtered_sub))
 
-    return " ".join(clean_parts).strip()
+    result = " ".join(clean_parts).strip()
+    return result if result else "UNKNOWN"
 
 
 # ==========================================
@@ -120,7 +121,7 @@ def get_clean_system_name(raw_name: str) -> str:
 # ==========================================
 
 
-def update_project_index(context: Dict, version: str) -> None:
+def update_project_index(context: dict, version: str) -> None:
     """
     Aktualizuje indeks projektów + zapisuje wersję i historię.
 
@@ -132,7 +133,7 @@ def update_project_index(context: Dict, version: str) -> None:
 
     if os.path.exists(index_path):
         try:
-            with open(index_path, "r", encoding="utf-8") as f:
+            with open(index_path, encoding="utf-8") as f:
                 index = json.load(f)
         except json.JSONDecodeError:
             index = {}
@@ -172,8 +173,8 @@ def update_project_index(context: Dict, version: str) -> None:
 
     usage_json = {
         sys: {
-            "profiles": sorted(list(data["profiles"])),
-            "hardware": sorted(list(data["hardware"])),
+            "hardware": sorted(data["hardware"]),
+            "profiles": sorted(data["profiles"]),
         }
         for sys, data in usage_by_system.items()
     }
@@ -201,7 +202,7 @@ def update_project_index(context: Dict, version: str) -> None:
         print(f"⚠️ Nie udało się zapisać indeksu: {e}")
 
 
-def get_version_history(project_number: str) -> List[Dict]:
+def get_version_history(project_number: str) -> list[dict]:
     """
     Pobiera historię wersji dla danego projektu z indeksu.
 
@@ -217,7 +218,7 @@ def get_version_history(project_number: str) -> List[Dict]:
         return []
 
     try:
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index = json.load(f)
         return index.get(project_number, {}).get("version_history", [])
     except (json.JSONDecodeError, KeyError):
