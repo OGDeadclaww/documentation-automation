@@ -35,7 +35,7 @@ DOCUMENTATION_PROJECTS_PATH = r"Z:\Pawel_Pisarski\Dokumentacja\projects"
 # ../   = projects/
 # ../../ = Dokumentacja/
 # ../../../ = Pawel_Pisarski/
-RELATIVE_DEPTH_TO_BASE = "../../.."
+RELATIVE_DEPTH_TO_BASE = "../../../.."
 
 # Będzie ustawione dynamicznie w main()
 OUTPUT_VIEWS_DIR = None
@@ -64,9 +64,7 @@ AUDIT_LOG = os.path.join(BASE_PATH, "logs", "audit_log.jsonl")
 # REGEX PATTERNS
 # ============================================
 POZ_LINE_RE = re.compile(r"Poz\.\s*(\d+)")
-SECTION_RE = re.compile(
-    r"^(Profile|Profile dodatkowe|Akcesoria|Okucia)\b", re.IGNORECASE
-)
+SECTION_RE = re.compile(r"^(Profile|Profile dodatkowe|Akcesoria|Okucia)\b", re.IGNORECASE)
 
 # ============================================
 # ZNANE SYSTEMY (dla walidacji)

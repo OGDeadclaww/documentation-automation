@@ -32,12 +32,13 @@ puppeteer:
 
 # Spis Treści
 - [Dokumentacja](#dokumentacja)
-- [UWAGI Ogólne](#uwagi-ogólne)
+- [==UWAGI Ogólne==](#uwagi-ogólne)
 - [📚 Katalogi Systemowe](#-katalogi-systemowe)
 - [🔩 Tabela Okuć i Akcesoriów](#-tabela-okuć-i-akcesoriów)
 {% for system_name in systems %}
 - [{{ system_name }}](#{{ system_name | lower | replace(' ', '-') }})
 {% endfor %}
+- [==UWAGI KOŃCOWE==](#uwagi-końcowe)
 - [📋 Historia Zmian](#-historia-zmian)
 
 ---
@@ -68,7 +69,7 @@ puppeteer:
 
 ---
 
-# <h id="uwagi-ogólne" style="color:ORANGE">UWAGI Ogólne</h>
+# ==UWAGI Ogólne==
 
 [⬆️ Spis Treści](#spis-treści)
 
@@ -121,13 +122,14 @@ puppeteer:
 
 </div>
 
+---
+
 <div style="page-break-before: always;"></div>
 
 {# --- PĘTLA PO SYSTEMACH --- #}
 {% for system_name, positions in systems_data.items() %}
 
 # <h id="{{ system_name | lower | replace(' ', '-') }}" style="color:GOLD">{{ system_name }}</h>
-<div style="text-align:center; color: gold; font-size: 0.8em; margin: -20px 0 10px 0;"> ▲ {{ system_name }} ▲ </div>
 
 ---
 
@@ -165,22 +167,10 @@ puppeteer:
 
 [🔝 Spis Treści](#spis-treści)
 
-| Kod | Opis | Rysunek | Ilość | Katalog | Status |
-| :--: | :-- | :--: | :--: | :--: | :--: |
+| Kod | Opis | Rysunek | Ilość | Katalog | Status | Checklista |
+| :--: | :-- | :--: | :--: | :--: | :--: | :--: |
 {% for hw in pos.hardware -%}
-| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | <span title="{{ hw.status_text }}">{{ hw.status_icon }}</span> |
-{% endfor %}
-
----
-
-### Checklista Poz. {{ pos.number }}
-
-[🔝 Spis Treści](#spis-treści)
-
-| ✓ | Kod | Opis | Ilość | Status | Katalog |
-| :--: | :--: | :--: | :-- | :--: | :--: |
-{% for hw in pos.hardware -%}
-| <input type="checkbox"> | `{{ hw.code }}` | {{ hw.desc }} | {{ hw.quantity }} | {% set qty = hw.quantity.split()[0] | int %}{% if qty > 10 %}🔴{% elif qty > 5 %}🟡{% else %}🟢{% endif %} | [📄](#checklist-{{ hw.code }}-{{ pos.number }}) |
+| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | <span title="{{ hw.status_text }}">{{ hw.status_icon }}</span> | [📄](#checklist-{{ hw.code }}-{{ pos.number }}) |
 {% endfor %}
 
 ---
@@ -209,6 +199,13 @@ puppeteer:
 <div style="page-break-before: always;"></div>
 
 {% endfor %} {# Koniec pętli systemów #}
+
+---
+
+# ==UWAGI KOŃCOWE==
+- [ ] Uwaga 1
+  - [ ] Szczegóły...
+    > Położenie...
 
 ---
 
