@@ -10,10 +10,10 @@ Zawiera logikę:
 
 import os
 import re
-from typing import Dict, Optional
+import subprocess
+from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
-
 
 # ==========================================
 # KONFIGURACJA
@@ -23,9 +23,10 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
 try:
-    from config import DOCUMENTATION_PROJECTS_PATH
+    from config import DOCUMENTATION_PROJECTS_PATH, OPERATORS_DOCS_PATH
 except ImportError:
     DOCUMENTATION_PROJECTS_PATH = "./output"
+    OPERATORS_DOCS_PATH = "./operators"
 
 
 # ==========================================
@@ -75,15 +76,75 @@ def get_output_filename(project_folder_name: str) -> str:
 
 
 # ==========================================
+# SKRÓTY DLA OPERATORÓW
+# ==========================================
+
+
+def create_pdf_shortcut(pdf_path: str, project_number: str) -> bool:
+    """
+    Tworzy folder i skrót Windows (.lnk) do najnowszego PDF dla operatorów.
+
+    Args:
+        pdf_path: pełna ścieżka do PDF (np. Z:/Pawel_Pisarski/.../P241031.pdf)
+        project_number: numer projektu (np. P241031)
+
+    Returns:
+        True jeśli sukces, False w przeciwnym razie
+    """
+    # Folder docelowy: Z:/Operatorzy/Dokumentacja/P241031/
+    shortcut_dir = Path(OPERATORS_DOCS_PATH) / project_number
+    shortcut_path = shortcut_dir / f"{project_number}_Dokumentacja.lnk"
+
+    # Utwórz folder jeśli nie istnieje
+    try:
+        shortcut_dir.mkdir(parents=True, exist_ok=True)
+        print(f"📁 Folder operatorów: {shortcut_dir}")
+    except Exception as e:
+        print(f"⚠️ Błąd tworzenia folderu: {e}")
+        return False
+
+    # Usuń stary skrót jeśli istnieje
+    if shortcut_path.exists():
+        shortcut_path.unlink()
+        print(f"🗑️ Usunięto stary skrót: {shortcut_path.name}")
+
+    # Stwórz nowy skrót za pomocą PowerShell
+    ps_script = f"""
+$WshShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
+$Shortcut.TargetPath = "{pdf_path}"
+$Shortcut.Description = "Dokumentacja {project_number}"
+$Shortcut.Save()
+"""
+
+    try:
+        subprocess.run(
+            ["powershell", "-Command", ps_script],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        print(f"✅ Utworzono skrót: {shortcut_path}")
+        print(f"   → wskazuje na: {pdf_path}")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️ Błąd PowerShell: {e.stderr}")
+        return False
+    except Exception as e:
+        print(f"⚠️ Błąd tworzenia skrótu: {e}")
+        return False
+
+
+# ==========================================
 # RENDEROWANIE
 # ==========================================
 
 
 def render_markdown(
-    context: Dict,
-    output_filename: Optional[str] = None,
+    context: dict,
+    output_filename: str | None = None,
     template_name: str = "project_doc.md.j2",
-) -> Optional[str]:
+) -> str | None:
     """
     Renderuje szablon Jinja2 do pliku MD w folderze projektu.
 
@@ -146,5 +207,15 @@ def render_markdown(
 
     # Zapisz do indeksu
     update_project_index(context, version)
+
+    # === AUTOMATYCZNY SKRÓT DLA OPERATORÓW ===
+    project_number = context.get("project_number", "UNKNOWN")
+    pdf_path = context.get("pdf_output_path", "")
+
+    if pdf_path and project_number != "UNKNOWN":
+        print("\n📂 Tworzenie skrótu dla operatorów...")
+        create_pdf_shortcut(pdf_path, project_number)
+    else:
+        print("⚠️ Pominięto skrót (brak numeru projektu lub ścieżki PDF)")
 
     return out_path

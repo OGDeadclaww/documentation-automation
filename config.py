@@ -107,3 +107,6 @@ IGNORED_SYSTEM_SUFFIXES = ["SI", "ST"]
 # AUTOR PEŁNE ID (dla dokumentacji)
 # ============================================
 AUTHOR_NAME = "Paweł Pisarski"
+
+# Ścieżka do folderów z dokumentacją dla operatorów
+OPERATORS_DOCS_PATH = r"Z:\Operatorzy\Dokumentacja"
