@@ -35,7 +35,8 @@ DOCUMENTATION_PROJECTS_PATH = r"Z:\Pawel_Pisarski\Dokumentacja\projects"
 # ../   = projects/
 # ../../ = Dokumentacja/
 # ../../../ = Pawel_Pisarski/
-RELATIVE_DEPTH_TO_BASE = "../../../.."
+RELATIVE_DEPTH_TO_Z = "../../../.."
+RELATIVE_DEPTH_TO_BASE = "../../.."
 
 # Będzie ustawione dynamicznie w main()
 OUTPUT_VIEWS_DIR = None

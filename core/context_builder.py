@@ -8,20 +8,19 @@ Zawiera logikę:
 - przygotowania kompletnego kontekstu dla Jinja2
 """
 
+import datetime
 import os
 import re
-import datetime
-from typing import Dict, List, Any
+from typing import Any
 
-from config import PROJECTS_IMAGES, AUTHOR_NAME
-
+from config import AUTHOR_NAME, PROJECTS_IMAGES
 
 # ==========================================
 # HELPERS — PROJEKT
 # ==========================================
 
 
-def parse_project_name(folder_name: str) -> Dict[str, str]:
+def parse_project_name(folder_name: str) -> dict[str, str]:
     """
     Rozbija nazwę folderu na części (Klient, Numer, Opis).
 
@@ -75,8 +74,8 @@ def get_profiles_for_position(
     vendor_key: str,
     vendor_cls: Any,
     sys_name: str,
-    product_db: Dict,
-) -> List[Dict]:
+    product_db: dict,
+) -> list[dict]:
     """
     Pobiera i grupuje profile dla danej pozycji.
 
@@ -96,9 +95,7 @@ def get_profiles_for_position(
         if display_code not in grouped:
             sys_folder = sys_name.upper()
             img_filename = f"{display_code}.jpg"
-            img_path = (
-                f"../../images_db/{vendor_key}/profiles/{sys_folder}/{img_filename}"
-            )
+            img_path = f"../../images_db/{vendor_key}/profiles/{sys_folder}/{img_filename}"
 
             grouped[display_code] = {
                 "code": display_code,
@@ -147,17 +144,17 @@ def get_hardware_for_position(
     vendor_key: str,
     vendor_cls: Any,
     sys_name: str,
-    product_db: Dict,
-    all_hardware_map: Dict,
-) -> List[Dict]:
+    product_db: dict,
+    all_hardware_map: dict,
+) -> list[dict]:
     """
     Pobiera i przetwarza okucia dla danej pozycji.
 
     Returns:
         Lista okuć z metadanymi i linkami do katalogów
     """
-    from parsers.csv_parser import get_data_for_position
     from core.catalogs import build_hardware_catalog_link
+    from parsers.csv_parser import get_data_for_position
 
     pos_data = get_data_for_position(csv_path, pos_num, vendor_cls, product_db)
     hardware_list = []
@@ -179,9 +176,7 @@ def get_hardware_for_position(
         checklist_id = f"{display_code.replace(' ', '_')}_{pos_num}"
 
         # Wylicz link + sprawdź istnienie pliku
-        catalog_link, file_exists = build_hardware_catalog_link(
-            vendor_key, sys_name, display_code
-        )
+        catalog_link, file_exists = build_hardware_catalog_link(vendor_key, sys_name, display_code)
 
         status_icon = "✅" if file_exists else "🔴"
         status_text = "" if file_exists else "Brak w katalogu"
@@ -209,17 +204,17 @@ def get_hardware_for_position(
 # ==========================================
 
 
-def build_job_links(timestamp: str) -> List[Dict]:
+def build_job_links(timestamp: str) -> list[dict]:
     """
     Zwraca wiersze dla JOB (lokalny i sieciowy).
     """
-    from config import JOB_PATH_LOCAL, RELATIVE_DEPTH_TO_BASE
+    from config import JOB_PATH_LOCAL, RELATIVE_DEPTH_TO_Z
 
     def _url_encode(path_str: str) -> str:
         return path_str.replace(" ", "%20")
 
     local_norm = JOB_PATH_LOCAL.replace("\\", "/")
-    job_network_rel = f"{RELATIVE_DEPTH_TO_BASE}/JOB/Lotti/"
+    job_network_rel = f"{RELATIVE_DEPTH_TO_Z}/JOB/Lotti/"
 
     local_link = _url_encode(f"{local_norm}/")
     network_link = _url_encode(job_network_rel)
@@ -244,7 +239,7 @@ def build_documents_list(
     doc_folder: str,
     project_folder_name: str,
     timestamp: str,
-) -> List[Dict]:
+) -> list[dict]:
     """
     Buduje listę dokumentów z folderu projektu + wiersze JOB.
     """
@@ -269,9 +264,9 @@ def build_documents_list(
 
 
 def build_catalogs_list(
-    systems_map: Dict[str, List],
+    systems_map: dict[str, list],
     vendor_key: str,
-) -> List[Dict]:
+) -> list[dict]:
     """
     Buduje listę katalogów systemowych.
     """
@@ -307,7 +302,7 @@ def prepare_context(
     project_folder_name: str,
     vendor_key: str,
     doc_folder: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Buduje kompletny kontekst danych dla szablonu dokumentacji.
 
@@ -321,11 +316,11 @@ def prepare_context(
     Returns:
         Słownik z kompletnym kontekstem dla Jinja2
     """
-    from parsers.vendors import get_vendor_by_key
+    from core.catalogs import build_hardware_catalog_link
+    from core.versioning import get_version_history
     from parsers.csv_parser import get_positions_with_systems
     from parsers.db_builder import build_product_db
-    from core.versioning import get_version_history
-    from core.catalogs import build_hardware_catalog_link
+    from parsers.vendors import get_vendor_by_key
 
     print(f"⚙️  Generowanie danych dla: {project_folder_name}...")
 
@@ -419,9 +414,7 @@ def prepare_context(
         sys_name = meta["sys_name"]
         img_path = f"../../images_db/{vendor_key}/hardware/{code}.jpg"
 
-        catalog_link, file_exists = build_hardware_catalog_link(
-            vendor_key, sys_name, code
-        )
+        catalog_link, file_exists = build_hardware_catalog_link(vendor_key, sys_name, code)
 
         status_icon = "✅" if file_exists else "🔴"
         status_text = "Katalog OK" if file_exists else "Brak w katalogu"
