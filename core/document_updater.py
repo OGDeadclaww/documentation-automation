@@ -80,22 +80,18 @@ def get_output_filename(project_folder_name: str) -> str:
 # ==========================================
 
 
-def create_pdf_shortcut(pdf_path: str, project_number: str) -> bool:
+def create_pdf_shortcut(pdf_path: str, dir_name: str, file_prefix: str) -> bool:
     """
     Tworzy folder i skrót Windows (.lnk) do najnowszego PDF dla operatorów.
 
     Args:
-        pdf_path: pełna ścieżka do PDF (np. Z:/Pawel_Pisarski/.../P241031.pdf)
-        project_number: numer projektu (np. P241031)
-
-    Returns:
-        True jeśli sukces, False w przeciwnym razie
+        pdf_path: pełna ścieżka do PDF
+        dir_name: nazwa folderu docelowego (np. 'P241031' lub '2025-11-17_DRZWI_EI60_SOLEC')
+        file_prefix: prefix nazwy skrótu (np. 'P241031' lub 'DRZWI_EI60_SOLEC')
     """
-    # Folder docelowy: Z:/Operatorzy/Dokumentacja/P241031/
-    shortcut_dir = Path(OPERATORS_DOCS_PATH) / project_number
-    shortcut_path = shortcut_dir / f"{project_number}_Dokumentacja.lnk"
+    shortcut_dir = Path(OPERATORS_DOCS_PATH) / dir_name
+    shortcut_path = shortcut_dir / f"{file_prefix}_Dokumentacja.lnk"
 
-    # Utwórz folder jeśli nie istnieje
     try:
         shortcut_dir.mkdir(parents=True, exist_ok=True)
         print(f"📁 Folder operatorów: {shortcut_dir}")
@@ -103,26 +99,21 @@ def create_pdf_shortcut(pdf_path: str, project_number: str) -> bool:
         print(f"⚠️ Błąd tworzenia folderu: {e}")
         return False
 
-    # Usuń stary skrót jeśli istnieje
     if shortcut_path.exists():
         shortcut_path.unlink()
         print(f"🗑️ Usunięto stary skrót: {shortcut_path.name}")
 
-    # Stwórz nowy skrót za pomocą PowerShell
     ps_script = f"""
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
 $Shortcut.TargetPath = "{pdf_path}"
-$Shortcut.Description = "Dokumentacja {project_number}"
+$Shortcut.Description = "Dokumentacja {file_prefix}"
 $Shortcut.Save()
 """
 
     try:
         subprocess.run(
-            ["powershell", "-Command", ps_script],
-            capture_output=True,
-            text=True,
-            check=True,
+            ["powershell", "-Command", ps_script], capture_output=True, text=True, check=True
         )
         print(f"✅ Utworzono skrót: {shortcut_path}")
         print(f"   → wskazuje na: {pdf_path}")
@@ -209,13 +200,23 @@ def render_markdown(
     update_project_index(context, version)
 
     # === AUTOMATYCZNY SKRÓT DLA OPERATORÓW ===
-    project_number = context.get("project_number", "UNKNOWN")
     pdf_path = context.get("pdf_output_path", "")
+    project_number = context.get("project_number", "").strip()
+    project_folder_name = context.get("project_folder_name", "")
 
-    if pdf_path and project_number != "UNKNOWN":
+    # Wylicz czystą nazwę (bez daty)
+    clean_name = strip_date_from_folder_name(project_folder_name)
+
+    if pdf_path:
+        # LOGIKA NAZEWNICTWA:
+        # Jeśli mamy numer Pxxxx (Beddeleem) -> użyj go
+        # Jeśli nie (np. DRZWI_SOLEC) -> użyj nazw folderów
+        dir_name = project_number if project_number else project_folder_name
+        file_prefix = project_number if project_number else clean_name
+
         print("\n📂 Tworzenie skrótu dla operatorów...")
-        create_pdf_shortcut(pdf_path, project_number)
+        create_pdf_shortcut(pdf_path, dir_name, file_prefix)
     else:
-        print("⚠️ Pominięto skrót (brak numeru projektu lub ścieżki PDF)")
+        print("⚠️ Pominięto skrót (brak ścieżki PDF)")
 
     return out_path
