@@ -288,6 +288,35 @@ def build_catalogs_list(
                 }
             )
 
+    # === DODATEK: OGÓLNE KATALOGI ALUPROF (DRZWI / OKNA) ===
+    if vendor_key == "aluprof":
+        from core.catalogs import find_base_hardware_catalog
+
+        sys_combined = " ".join(systems_map.keys()).lower()
+
+        # Prosta detekcja drzwi (EI, MB-78, MB-86, MB-70, TM, PE, DPA)
+        is_door = any(
+            k in sys_combined for k in ["ei", "drzwi", "pe", "tm", "mb-78", "mb-70", "mb-86", "dpa"]
+        )
+        # Detekcja okien (MB-79N, MB-86, MB-70, MB-104)
+        is_window = any(k in sys_combined for k in ["okn", "mb-79n", "mb-86", "mb-104", "mb-70"])
+
+        if is_door:
+            base_cat = find_base_hardware_catalog("aluprof", "okucia 2 - drzwi")
+            if base_cat:
+                catalogs.append(base_cat)
+
+        if is_window:
+            base_cat = find_base_hardware_catalog("aluprof", "okucia 1 - okna")
+            if base_cat:
+                catalogs.append(base_cat)
+
+        # Jeśli nic nie dopasowało (dziwna nazwa), domyślnie dajemy drzwiowe
+        if not is_door and not is_window:
+            base_cat = find_base_hardware_catalog("aluprof", "okucia 2 - drzwi")
+            if base_cat:
+                catalogs.append(base_cat)
+
     return catalogs
 
 

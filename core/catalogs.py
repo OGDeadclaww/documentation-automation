@@ -8,13 +8,11 @@ Zawiera logikę:
 - określania statusu aktualności katalogu
 """
 
-import re
-import os
 import datetime
-from typing import Optional, Dict, Tuple
+import os
+import re
 
 from config import CATALOGS_PATH, RELATIVE_DEPTH_TO_BASE
-
 
 # ==========================================
 # KONFIGURACJA
@@ -33,7 +31,7 @@ VENDOR_CATALOG_FOLDERS = {
 # ==========================================
 
 
-def get_catalog_status(date_obj: datetime.datetime) -> Tuple[str, str]:
+def get_catalog_status(date_obj: datetime.datetime) -> tuple[str, str]:
     """
     Zwraca (status_icon, status_text) na podstawie różnicy dat.
 
@@ -102,21 +100,24 @@ def _extract_date_from_catalog_filename(filepath: str) -> datetime.datetime:
 # ==========================================
 
 
-def find_system_catalog(vendor_key: str, sys_name: str) -> Optional[Dict]:
+def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
     """
     Szuka katalogu systemowego PDF dla danego dostawcy i systemu.
-
-    Logika dopasowania (od najbardziej precyzyjnej):
-    1. Nazwa pliku zaczyna się od sys_name
-    2. Nazwa pliku zawiera sys_name
-    3. Nazwa pliku zawiera sys_name bez separatorów
-
-    Status zależy od świeżości (3msc/6msc).
-
-    Returns:
-        Dict z kluczami: name, date, path, status_icon, status_text
-        lub None jeśli nie znaleziono
     """
+    import datetime
+    import os
+    import re
+
+    from config import CATALOGS_PATH, RELATIVE_DEPTH_TO_BASE
+    from core.file_scanner import url_encode
+
+    VENDOR_CATALOG_FOLDERS = {
+        "reynaers": "Reynaers",
+        "aluprof": "Aluprof",
+        "yawal": "Yawal",
+        "aliplast": "Aliplast",
+    }
+
     vendor_folder = VENDOR_CATALOG_FOLDERS.get(vendor_key)
     if not vendor_folder:
         return None
@@ -126,22 +127,25 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> Optional[Dict]:
         print(f"⚠️ Brak folderu katalogów: {catalog_dir}")
         return None
 
-    # Pobierz wszystkie PDF
     try:
         all_pdfs = [
             os.path.join(catalog_dir, f)
             for f in os.listdir(catalog_dir)
-            if f.lower().endswith(".pdf")
-            and os.path.isfile(os.path.join(catalog_dir, f))
+            if f.lower().endswith(".pdf") and os.path.isfile(os.path.join(catalog_dir, f))
         ]
     except PermissionError:
         print(f"⚠️ Brak dostępu do: {catalog_dir}")
         return None
 
     if not all_pdfs:
+        print(f"⚠️ Brak plików PDF w: {catalog_dir}")
         return None
 
-    sys_normalized = _normalize_system_name(sys_name)
+    def _normalize(text: str) -> str:
+        """Usuwa spacje, myślniki, kropki i podkreślenia do porównań."""
+        return re.sub(r"[\s\-_.]", "", text).lower()
+
+    sys_normalized = _normalize(sys_name)
     special_marks = ["bp", "ei", "dpa"]
     found_special = [m for m in special_marks if m in sys_normalized]
 
@@ -149,17 +153,25 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> Optional[Dict]:
 
     for pdf_path in all_pdfs:
         filename = os.path.basename(pdf_path)
-        filename_normalized = _normalize_system_name(filename)
+        name_no_ext = os.path.splitext(filename)[0]
+        filename_normalized = _normalize(name_no_ext)
 
         score = 10
 
+        # 1. Dokładne dopasowanie (np. mb78ei == mb78ei)
         if sys_normalized == filename_normalized:
             score = 1
         elif found_special and any(m in filename_normalized for m in found_special):
             if sys_normalized in filename_normalized:
                 score = 2
+        # 2. Inteligentne dopasowanie (zawiera datę w nazwie, np. mb78ei20251209)
         elif filename_normalized.startswith(sys_normalized):
-            score = 3
+            remainder = filename_normalized[len(sys_normalized) :]
+            # Jeśli to co zostało to same cyfry (data) -> uznajemy za idealne dopasowanie (score 1)
+            if re.match(r"^[\d]+$", remainder):
+                score = 1
+            else:
+                score = 3
         elif sys_normalized in filename_normalized:
             score = 4
 
@@ -167,27 +179,62 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> Optional[Dict]:
             matches.append((pdf_path, score))
 
     if not matches:
+        print(f"⚠️ Brak katalogu dla systemu '{sys_name}'")
         return None
 
-    # Sortuj: najlepszy score + najnowsza data
-    matches.sort(
-        key=lambda x: (x[1], -_extract_date_from_catalog_filename(x[0]).timestamp())
-    )
+    def _extract_date(filepath: str) -> datetime.datetime:
+        name = os.path.basename(filepath)
+
+        m = re.search(r"(\d{2})\.(\d{2})\.(\d{4})", name)
+        if m:
+            try:
+                return datetime.datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+            except ValueError:
+                pass
+
+        m = re.search(r"(\d{2})[._](\d{4})", name)
+        if m:
+            try:
+                return datetime.datetime(int(m.group(2)), int(m.group(1)), 1)
+            except ValueError:
+                pass
+
+        m = re.search(r"(20\d{2})", name)
+        if m:
+            try:
+                return datetime.datetime(int(m.group(1)), 1, 1)
+            except ValueError:
+                pass
+
+        return datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
+
+    # Sortujemy po wyniku (score), a potem po dacie (najnowsze)
+    matches.sort(key=lambda x: (x[1], -_extract_date(x[0]).timestamp()))
     best_path, best_score = matches[0]
 
-    date_obj = _extract_date_from_catalog_filename(best_path)
+    date_obj = _extract_date(best_path)
     date_str = date_obj.strftime("%d.%m.%Y")
-    status_icon, status_text = get_catalog_status(date_obj)
 
-    # Ścieżka relatywna
+    def _get_catalog_status(d_obj: datetime.datetime) -> tuple[str, str]:
+        now = datetime.datetime.now()
+        delta_days = (now - d_obj).days
+        if delta_days <= 90:
+            return "🟢", "Aktualny"
+        elif delta_days <= 180:
+            return "🟡", "Do weryfikacji"
+        else:
+            return "🔴", "Nieaktualny"
+
+    status_icon, status_text = _get_catalog_status(date_obj)
+
     best_norm = best_path.replace("\\", "/")
     catalogs_norm = CATALOGS_PATH.replace("\\", "/")
 
     if best_norm.lower().startswith(catalogs_norm.lower()):
         suffix = best_norm[len(catalogs_norm) :].lstrip("/")
-        rel_path = f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{suffix}".replace(" ", "%20")
+        rel_path = url_encode(f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{suffix}")
     else:
-        rel_path = best_norm.replace(" ", "%20")
+        rel_path = url_encode(best_norm)
 
     return {
         "name": sys_name.upper(),
@@ -243,9 +290,7 @@ def find_hardware_catalog_page(
             return "#"
 
         filename = candidates[0]
-        rel_path = (
-            f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder}/{filename}"
-        )
+        rel_path = f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder}/{filename}"
         return rel_path.replace(" ", "%20")
 
     except PermissionError:
@@ -256,7 +301,7 @@ def build_hardware_catalog_link(
     vendor_key: str,
     sys_name: str,
     hw_code: str,
-) -> Tuple[str, bool]:
+) -> tuple[str, bool]:
     """
     Wylicza link do PDF okucia w katalogu.
 
@@ -304,5 +349,90 @@ def build_hardware_catalog_link(
     # Fallback
     code_normalized = hw_code.replace(" ", "_")
     fallback_filename = f"{code_normalized}_obrobka.pdf"
-    rel_link = f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{fallback_filename}"
+    rel_link = (
+        f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{fallback_filename}"
+    )
     return rel_link.replace(" ", "%20"), False
+
+
+def find_base_hardware_catalog(vendor_key: str, catalog_type: str) -> dict | None:
+    """
+    Szuka ogólnego katalogu okuć (np. 'okucia 2 - drzwi') dla danego dostawcy.
+    """
+    import datetime
+
+    from config import CATALOGS_PATH
+    from core.file_scanner import url_encode
+
+    VENDOR_CATALOG_FOLDERS = {
+        "reynaers": "Reynaers",
+        "aluprof": "Aluprof",
+        "yawal": "Yawal",
+        "aliplast": "Aliplast",
+    }
+
+    vendor_folder = VENDOR_CATALOG_FOLDERS.get(vendor_key)
+    if not vendor_folder:
+        return None
+
+    catalog_dir = os.path.join(CATALOGS_PATH, vendor_folder)
+    if not os.path.isdir(catalog_dir):
+        return None
+
+    try:
+        all_pdfs = [
+            os.path.join(catalog_dir, f)
+            for f in os.listdir(catalog_dir)
+            if f.lower().endswith(".pdf") and os.path.isfile(os.path.join(catalog_dir, f))
+        ]
+    except PermissionError:
+        return None
+
+    if not all_pdfs:
+        return None
+
+    search_term = catalog_type.lower().replace(" ", "").replace("-", "")
+    matches = []
+
+    for pdf_path in all_pdfs:
+        filename = os.path.basename(pdf_path).lower()
+        name_no_ext = os.path.splitext(filename)[0]
+        norm_name = name_no_ext.replace(" ", "").replace("-", "")
+
+        if norm_name.startswith(search_term):
+            matches.append(pdf_path)
+
+    if not matches:
+        return None
+
+    # Sortowanie po dacie modyfikacji pliku (najnowszy pierwszy)
+    matches.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    best_path = matches[0]
+
+    date_ts = os.path.getmtime(best_path)
+    date_str = datetime.datetime.fromtimestamp(date_ts).strftime("%d.%m.%Y")
+
+    # Status na sztywno "Aktualny" dla ogólnych, lub możesz rozbudować logikę
+    status_icon, status_text = "🟢", "Aktualny"
+
+    best_norm = best_path.replace("\\", "/")
+    catalogs_norm = CATALOGS_PATH.replace("\\", "/")
+
+    if best_norm.lower().startswith(catalogs_norm.lower()):
+        from config import RELATIVE_DEPTH_TO_BASE
+
+        suffix = best_norm[len(catalogs_norm) :].lstrip("/")
+        rel_path = url_encode(f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{suffix}")
+    else:
+        rel_path = url_encode(best_norm)
+
+    # Ładna nazwa do tabelki
+    display_name = "Okucia Drzwiowe" if "drzwi" in catalog_type else "Okucia Okienne"
+
+    return {
+        "name": f"ALUPROF - {display_name}",
+        "date": date_str,
+        "path": rel_path,
+        "status_icon": status_icon,
+        "status_text": status_text,
+    }
