@@ -7,109 +7,36 @@ Zawiera logikę:
 - wyszukiwania kart katalogowych dla okuć
 - określania statusu aktualności katalogu
 """
-
 import datetime
 import os
 import re
 
-from config import CATALOGS_PATH, RELATIVE_DEPTH_TO_BASE
 
-# ==========================================
-# KONFIGURACJA
-# ==========================================
-
-VENDOR_CATALOG_FOLDERS = {
-    "reynaers": "Reynaers",
-    "aluprof": "Aluprof",
-    "yawal": "Yawal",
-    "aliplast": "Aliplast",
-}
+def url_encode(path_str: str) -> str:
+    """Zamienia spacje na %20 w ścieżce."""
+    return path_str.replace(" ", "%20")
 
 
-# ==========================================
-# HELPERS — STATUS KATALOGU
-# ==========================================
-
-
-def get_catalog_status(date_obj: datetime.datetime) -> tuple[str, str]:
+def get_catalog_status(d_obj: datetime.datetime) -> tuple[str, str]:
     """
     Zwraca (status_icon, status_text) na podstawie różnicy dat.
-
-    - Do 3 miesięcy:   🟢 Aktualny
-    - 3-6 miesięcy:    🟡 Do weryfikacji
-    - Powyżej 6 mcy:   🔴 Nieaktualny
     """
     now = datetime.datetime.now()
-    delta_days = (now - date_obj).days
+    delta_days = (now - d_obj).days
 
-    if delta_days <= 90:  # ~3 miesiące
+    if delta_days <= 180:  # 6 miesięcy
         return "🟢", "Aktualny"
-    elif delta_days <= 180:  # ~6 miesięcy
+    elif delta_days <= 365:  # 1 rok
         return "🟡", "Do weryfikacji"
-    else:
+    else:  # Powyżej roku
         return "🔴", "Nieaktualny"
-
-
-def _normalize_system_name(text: str) -> str:
-    """Normalizuje nazwę systemu do porównań."""
-    return re.sub(r"[\s\-_.]", "", text).lower()
-
-
-def _extract_date_from_catalog_filename(filepath: str) -> datetime.datetime:
-    """
-    Wyciąga datę z nazwy pliku katalogu.
-
-    Szuka wzorców:
-    - DD.MM.YYYY
-    - MM_YYYY lub MM.YYYY
-    - YYYY (rok)
-    - Fallback: data modyfikacji pliku
-    """
-    name = os.path.basename(filepath)
-
-    # Pattern: DD.MM.YYYY
-    m = re.search(r"(\d{2})\.(\d{2})\.(\d{4})", name)
-    if m:
-        try:
-            return datetime.datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)))
-        except ValueError:
-            pass
-
-    # Pattern: MM_YYYY lub MM.YYYY
-    m = re.search(r"(\d{2})[._](\d{4})", name)
-    if m:
-        try:
-            return datetime.datetime(int(m.group(2)), int(m.group(1)), 1)
-        except ValueError:
-            pass
-
-    # Pattern: YYYY
-    m = re.search(r"(20\d{2})", name)
-    if m:
-        try:
-            return datetime.datetime(int(m.group(1)), 1, 1)
-        except ValueError:
-            pass
-
-    # Fallback
-    return datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
-
-
-# ==========================================
-# KATALOGI SYSTEMOWE
-# ==========================================
 
 
 def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
     """
     Szuka katalogu systemowego PDF dla danego dostawcy i systemu.
     """
-    import datetime
-    import os
-    import re
-
     from config import CATALOGS_PATH, RELATIVE_DEPTH_TO_BASE
-    from core.file_scanner import url_encode
 
     VENDOR_CATALOG_FOLDERS = {
         "reynaers": "Reynaers",
@@ -134,11 +61,9 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
             if f.lower().endswith(".pdf") and os.path.isfile(os.path.join(catalog_dir, f))
         ]
     except PermissionError:
-        print(f"⚠️ Brak dostępu do: {catalog_dir}")
         return None
 
     if not all_pdfs:
-        print(f"⚠️ Brak plików PDF w: {catalog_dir}")
         return None
 
     def _normalize(text: str) -> str:
@@ -164,12 +89,11 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
         elif found_special and any(m in filename_normalized for m in found_special):
             if sys_normalized in filename_normalized:
                 score = 2
-        # 2. Inteligentne dopasowanie (zawiera datę w nazwie, np. mb78ei20251209)
+        # 2. Zawiera datę na końcu (np. mb78ei20251209)
         elif filename_normalized.startswith(sys_normalized):
             remainder = filename_normalized[len(sys_normalized) :]
-            # Jeśli to co zostało to same cyfry (data) -> uznajemy za idealne dopasowanie (score 1)
             if re.match(r"^[\d]+$", remainder):
-                score = 1
+                score = 1  # Idealne dopasowanie, reszta to tylko cyfry daty
             else:
                 score = 3
         elif sys_normalized in filename_normalized:
@@ -179,53 +103,40 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
             matches.append((pdf_path, score))
 
     if not matches:
-        print(f"⚠️ Brak katalogu dla systemu '{sys_name}'")
         return None
 
+    # NOWY INTELIGENTNY EKSTRAKTOR DAT
     def _extract_date(filepath: str) -> datetime.datetime:
         name = os.path.basename(filepath)
+        mtime = datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
 
-        m = re.search(r"(\d{2})\.(\d{2})\.(\d{4})", name)
+        # Format: RRRR-MM-DD, RRRR.MM.DD, RRRR_MM_DD
+        m = re.search(r"(\d{4})[-._](\d{2})[-._](\d{2})", name)
+        if m:
+            try:
+                return datetime.datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except ValueError:
+                pass
+
+        # Format: DD-MM-RRRR, DD.MM.RRRR, DD_MM_RRRR
+        m = re.search(r"(\d{2})[-._](\d{2})[-._](\d{4})", name)
         if m:
             try:
                 return datetime.datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)))
             except ValueError:
                 pass
 
-        m = re.search(r"(\d{2})[._](\d{4})", name)
-        if m:
-            try:
-                return datetime.datetime(int(m.group(2)), int(m.group(1)), 1)
-            except ValueError:
-                pass
+        # Jeśli brak daty w nazwie, używamy daty modyfikacji pliku z Windows
+        return mtime
 
-        m = re.search(r"(20\d{2})", name)
-        if m:
-            try:
-                return datetime.datetime(int(m.group(1)), 1, 1)
-            except ValueError:
-                pass
-
-        return datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
-
-    # Sortujemy po wyniku (score), a potem po dacie (najnowsze)
+    # Sortujemy: najpierw po trafności (score = 1 jest najlepszy), potem po dacie (najnowsze)
     matches.sort(key=lambda x: (x[1], -_extract_date(x[0]).timestamp()))
     best_path, best_score = matches[0]
 
     date_obj = _extract_date(best_path)
     date_str = date_obj.strftime("%d.%m.%Y")
 
-    def _get_catalog_status(d_obj: datetime.datetime) -> tuple[str, str]:
-        now = datetime.datetime.now()
-        delta_days = (now - d_obj).days
-        if delta_days <= 90:
-            return "🟢", "Aktualny"
-        elif delta_days <= 180:
-            return "🟡", "Do weryfikacji"
-        else:
-            return "🔴", "Nieaktualny"
-
-    status_icon, status_text = _get_catalog_status(date_obj)
+    status_icon, status_text = get_catalog_status(date_obj)
 
     best_norm = best_path.replace("\\", "/")
     catalogs_norm = CATALOGS_PATH.replace("\\", "/")
@@ -245,124 +156,11 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
     }
 
 
-# ==========================================
-# OKUCIA — KARTY KATALOGOWE
-# ==========================================
-
-
-def find_hardware_catalog_page(
-    vendor_key: str,
-    sys_name: str,
-    hw_code: str,
-) -> str:
-    """
-    Szuka strony katalogowej (PDF) dla konkretnego okucia.
-
-    Struktura:
-      Katalogi/{Vendor}/{SYS_NAME_UPPERCASE}/{hw_code}*.pdf
-
-    Returns:
-        Relatywna ścieżka MD lub '#' jeśli nie znaleziono.
-    """
-    vendor_folder = VENDOR_CATALOG_FOLDERS.get(vendor_key)
-    if not vendor_folder:
-        return "#"
-
-    sys_folder = sys_name.upper()
-    hw_dir = os.path.join(CATALOGS_PATH, vendor_folder, sys_folder)
-
-    if not os.path.isdir(hw_dir):
-        return "#"
-
-    code_normalized = hw_code.replace(" ", "_").replace(".", "").lower()
-
-    try:
-        all_files = os.listdir(hw_dir)
-        candidates = [
-            f
-            for f in all_files
-            if os.path.isfile(os.path.join(hw_dir, f))
-            and os.path.splitext(f)[1].lower() == ".pdf"
-            and f.lower().replace("_", "").replace(".", "").startswith(code_normalized)
-        ]
-
-        if not candidates:
-            return "#"
-
-        filename = candidates[0]
-        rel_path = f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder}/{filename}"
-        return rel_path.replace(" ", "%20")
-
-    except PermissionError:
-        return "#"
-
-
-def build_hardware_catalog_link(
-    vendor_key: str,
-    sys_name: str,
-    hw_code: str,
-) -> tuple[str, bool]:
-    """
-    Wylicza link do PDF okucia w katalogu.
-
-    Logika:
-    1. Szukaj rzeczywistego pliku pasującego do kodu
-    2. Jeśli znajdziesz → zwróć link (file_exists=True)
-    3. Jeśli nie → zwróć fallback {kod}_obrobka.pdf (file_exists=False)
-
-    Returns:
-        (link_relatywny, czy_plik_istnieje)
-    """
-    vendor_folder = VENDOR_CATALOG_FOLDERS.get(vendor_key)
-    if not vendor_folder:
-        return "#", False
-
-    sys_folder_upper = sys_name.upper()
-    hw_dir = os.path.join(CATALOGS_PATH, vendor_folder, sys_folder_upper)
-
-    if not os.path.isdir(hw_dir):
-        code_normalized = hw_code.replace(" ", "_")
-        fallback_filename = f"{code_normalized}_obrobka.pdf"
-        rel_link = f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{fallback_filename}"
-        return rel_link.replace(" ", "%20"), False
-
-    code_search = hw_code.replace(" ", "").replace(".", "").lower()
-
-    try:
-        all_files = os.listdir(hw_dir)
-        pdf_files = [f for f in all_files if f.lower().endswith(".pdf")]
-
-        matching_files = [
-            f
-            for f in pdf_files
-            if f.lower().replace("_", "").replace(".", "").startswith(code_search)
-        ]
-
-        if matching_files:
-            found_filename = matching_files[0]
-            rel_link = f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{found_filename}"
-            return rel_link.replace(" ", "%20"), True
-
-    except PermissionError:
-        pass
-
-    # Fallback
-    code_normalized = hw_code.replace(" ", "_")
-    fallback_filename = f"{code_normalized}_obrobka.pdf"
-    rel_link = (
-        f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{fallback_filename}"
-    )
-    return rel_link.replace(" ", "%20"), False
-
-
 def find_base_hardware_catalog(vendor_key: str, catalog_type: str) -> dict | None:
     """
     Szuka ogólnego katalogu okuć (np. 'okucia 2 - drzwi') dla danego dostawcy.
     """
-    import datetime
-
-    from config import CATALOGS_PATH
-    from core.file_scanner import url_encode
+    from config import CATALOGS_PATH, RELATIVE_DEPTH_TO_BASE
 
     VENDOR_CATALOG_FOLDERS = {
         "reynaers": "Reynaers",
@@ -388,9 +186,6 @@ def find_base_hardware_catalog(vendor_key: str, catalog_type: str) -> dict | Non
     except PermissionError:
         return None
 
-    if not all_pdfs:
-        return None
-
     search_term = catalog_type.lower().replace(" ", "").replace("-", "")
     matches = []
 
@@ -412,21 +207,17 @@ def find_base_hardware_catalog(vendor_key: str, catalog_type: str) -> dict | Non
     date_ts = os.path.getmtime(best_path)
     date_str = datetime.datetime.fromtimestamp(date_ts).strftime("%d.%m.%Y")
 
-    # Status na sztywno "Aktualny" dla ogólnych, lub możesz rozbudować logikę
     status_icon, status_text = "🟢", "Aktualny"
 
     best_norm = best_path.replace("\\", "/")
     catalogs_norm = CATALOGS_PATH.replace("\\", "/")
 
     if best_norm.lower().startswith(catalogs_norm.lower()):
-        from config import RELATIVE_DEPTH_TO_BASE
-
         suffix = best_norm[len(catalogs_norm) :].lstrip("/")
         rel_path = url_encode(f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{suffix}")
     else:
         rel_path = url_encode(best_norm)
 
-    # Ładna nazwa do tabelki
     display_name = "Okucia Drzwiowe" if "drzwi" in catalog_type else "Okucia Okienne"
 
     return {
@@ -436,3 +227,77 @@ def find_base_hardware_catalog(vendor_key: str, catalog_type: str) -> dict | Non
         "status_icon": status_icon,
         "status_text": status_text,
     }
+
+
+# ==========================================
+# WYSZUKIWANIE OKUĆ (PRZYWRÓCONE)
+# ==========================================
+
+
+def build_hardware_catalog_link(
+    vendor_key: str,
+    sys_name: str,
+    hw_code: str,
+) -> tuple[str, bool]:
+    """
+    Wylicza link do PDF okucia w katalogu.
+    Zwraca: (link_relatywny, czy_plik_istnieje)
+    """
+    import os
+
+    from config import CATALOGS_PATH, RELATIVE_DEPTH_TO_BASE
+
+    VENDOR_CATALOG_FOLDERS = {
+        "reynaers": "Reynaers",
+        "aluprof": "Aluprof",
+        "yawal": "Yawal",
+        "aliplast": "Aliplast",
+    }
+
+    vendor_folder = VENDOR_CATALOG_FOLDERS.get(vendor_key)
+    if not vendor_folder:
+        return "#", False
+
+    sys_folder_upper = sys_name.upper()
+    hw_dir = os.path.join(CATALOGS_PATH, vendor_folder, sys_folder_upper)
+
+    code_normalized = hw_code.replace(" ", "_")
+    fallback_filename = f"{code_normalized}_obrobka.pdf"
+    fallback_link = (
+        f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{fallback_filename}"
+    )
+
+    if not os.path.isdir(hw_dir):
+        return url_encode(fallback_link), False
+
+    code_search = hw_code.replace(" ", "").replace(".", "").lower()
+
+    try:
+        all_files = os.listdir(hw_dir)
+        pdf_files = [f for f in all_files if f.lower().endswith(".pdf")]
+
+        matching_files = [
+            f
+            for f in pdf_files
+            if f.lower().replace("_", "").replace(".", "").startswith(code_search)
+        ]
+
+        if matching_files:
+            found_filename = matching_files[0]
+            rel_link = f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{found_filename}"
+            return url_encode(rel_link), True
+
+    except PermissionError:
+        pass
+
+    return url_encode(fallback_link), False
+
+
+def find_hardware_catalog_page(
+    vendor_key: str,
+    sys_name: str,
+    hw_code: str,
+) -> str:
+    """Kompatybilność wsteczna dla starego kodu"""
+    link, _ = build_hardware_catalog_link(vendor_key, sys_name, hw_code)
+    return link

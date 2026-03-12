@@ -157,7 +157,7 @@ def render_markdown(
     # Wylicz wersję PRZED renderowaniem
     from core.versioning import get_next_version, update_project_index
 
-    version = get_next_version(out_path, context.get("project_number", "UNKNOWN"))
+    version = get_next_version(out_path, context.get("project_number", "UNKNOWN"), proj_folder_name)
 
     # === POPRAWKA HISTORII v1.0 ===
     updated_history = context.get("version_history", [])
