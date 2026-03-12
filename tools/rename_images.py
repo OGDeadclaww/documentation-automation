@@ -5,36 +5,37 @@ Wersja z automatycznym wykrywaniem plików w folderze źródłowym.
 Obsługuje rozszerzenia: .MET (Aluprof), .REY (Reynaers), .ALI (Aliplast).
 """
 
-import os
 import glob
+import os
 from tkinter import messagebox
 
-from config import BASE_PATH, PROJECTS_IMAGES, IMAGES_DB
 from auth import check_authorization, log_audit
-from parsers.vendors import VENDOR_PROFILES
+from config import BASE_PATH, IMAGES_DB, PROJECTS_IMAGES
+from core.versioning import get_clean_system_name
 from gui.gui import (
-    select_vendor,
-    select_project_from_list,
-    select_folder,
-    get_project_prefix_from_met,
-    validate_and_choose_system,
     confirm_detected_colors,
-)
-from parsers.csv_parser import (
-    get_positions_from_csv,
-    extract_system_from_csv,
-    extract_color_codes_from_csv,
-    parse_hardware_from_csv,
-    get_profile_codes_by_system,
-    get_positions_with_systems,
+    get_project_prefix_from_met,
+    select_folder,
+    select_project_from_list,
+    select_vendor,
+    validate_and_choose_system,
 )
 from html_processor import (
-    get_rk_images_from_html,
-    rename_views,
-    rename_profiles_from_lp_html,
     build_hardware_mapping_from_lp_html,
+    get_rk_images_from_html,
     rename_hardware,
+    rename_profiles_from_lp_html,
+    rename_views,
 )
+from parsers.csv_parser import (
+    extract_color_codes_from_csv,
+    extract_system_from_csv,
+    get_positions_from_csv,
+    get_positions_with_systems,
+    get_profile_codes_by_system,
+    parse_hardware_from_csv,
+)
+from parsers.vendors import VENDOR_PROFILES
 
 
 def find_file_by_pattern(folder, pattern, description):
@@ -89,9 +90,7 @@ def auto_detect_vendor(csv_file, meta_file):
 
     if "mb-" in sys_lower:
         return VENDOR_PROFILES["aluprof"]
-    if any(
-        x in sys_lower for x in ["masterline", "cs-", "cp-", "slimline", "hi-finity"]
-    ):
+    if any(x in sys_lower for x in ["masterline", "cs-", "cp-", "slimline", "hi-finity"]):
         return VENDOR_PROFILES["reynaers"]
     if "aliplast" in sys_lower:
         return VENDOR_PROFILES["aliplast"]
@@ -152,10 +151,7 @@ def main():
         missing.append("Folder LP_images.files")
 
     if missing:
-        msg = (
-            "Nie znaleziono następujących plików w wybranym folderze:\n- "
-            + "\n- ".join(missing)
-        )
+        msg = "Nie znaleziono następujących plików w wybranym folderze:\n- " + "\n- ".join(missing)
         messagebox.showerror("Braki w plikach", msg)
         return
 
@@ -230,10 +226,15 @@ def main():
 
     for sys_name in systems_map.keys():
         profile_codes = profiles_by_system.get(sys_name, set())
-        output_profiles = os.path.join(IMAGES_DB, vendor_key, "profiles", sys_name)
+
+        # --- ZMIANA: CZYŚCIMY NAZWĘ SYSTEMU TAK SAMO JAK W DOC_GENERATOR ---
+        clean_sys_name = get_clean_system_name(sys_name).upper()
+        # -------------------------------------------------------------------
+
+        output_profiles = os.path.join(IMAGES_DB, vendor_key, "profiles", clean_sys_name)
         os.makedirs(output_profiles, exist_ok=True)
 
-        print(f"\n  📁 System: {sys_name} ({len(profile_codes)} profili)")
+        print(f"\n  📁 System: {clean_sys_name} ({len(profile_codes)} profili)")
         for code in sorted(profile_codes):
             print(f"     {code}")
 
@@ -251,9 +252,7 @@ def main():
 
     # KROK 4: Kopiowanie okuć
     print("\n[KROK 4/4] Przetwarzanie okuć...")
-    code_to_srcfile = build_hardware_mapping_from_lp_html(
-        lp_html, lp_dir, vendor_profile
-    )
+    code_to_srcfile = build_hardware_mapping_from_lp_html(lp_html, lp_dir, vendor_profile)
     rename_hardware(hardware_codes, code_to_srcfile, lp_dir, output_hardware)
 
     # Audit

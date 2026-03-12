@@ -83,21 +83,20 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
 
         score = 10
 
-        # 1. Dokładne dopasowanie (np. mb78ei == mb78ei)
+        # 1. Zmieniona punktacja priorytetów!
         if sys_normalized == filename_normalized:
-            score = 1
+            score = 2  # Goła nazwa bez daty dostaje 2 punkty
         elif found_special and any(m in filename_normalized for m in found_special):
             if sys_normalized in filename_normalized:
-                score = 2
-        # 2. Zawiera datę na końcu (np. mb78ei20251209)
+                score = 3
         elif filename_normalized.startswith(sys_normalized):
             remainder = filename_normalized[len(sys_normalized) :]
             if re.match(r"^[\d]+$", remainder):
-                score = 1  # Idealne dopasowanie, reszta to tylko cyfry daty
+                score = 1  # NAJWYŻSZY PRIORYTET: Nazwa + Data
             else:
-                score = 3
+                score = 4
         elif sys_normalized in filename_normalized:
-            score = 4
+            score = 5
 
         if score < 10:
             matches.append((pdf_path, score))

@@ -162,8 +162,17 @@ def get_hardware_for_position(
     for hw in pos_data["hardware"]:
         raw_code = hw["code"]
         desc = hw["desc"]
-        normalized_code = vendor_cls.parse_profile_code(raw_code)
+
+        # --- ZMIENIONY FRAGMENT ---
+        if hasattr(vendor_cls, "parse_hardware_code"):
+            # Używamy poprawnej funkcji dla okuć (akceptuje też color_suffix wg Twojej def)
+            normalized_code = vendor_cls.parse_hardware_code(raw_code)
+        else:
+            # W razie gdyby inny system nie miał tej funkcji
+            normalized_code = raw_code
+
         display_code = normalized_code if normalized_code else raw_code
+        # --------------------------
 
         # Dodaj do globalnej mapy
         if display_code not in all_hardware_map:

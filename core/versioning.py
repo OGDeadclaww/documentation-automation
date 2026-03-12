@@ -162,8 +162,12 @@ def update_project_index(context: dict, version: str) -> None:
     }
 
     existing = index.get(proj_num, {})
+    # Wczytujemy historię z JSON, i DODAJEMY nowy wpis
     version_history = existing.get("version_history", [])
-    version_history.append(history_entry)
+
+    # Sprawdzamy czy ten sam wpis wersji nie istnieje (aby uniknąć dubli przy wielokrotnym puszczeniu skryptu na "sucho")
+    if not any(e.get("version") == version for e in version_history):
+        version_history.append(history_entry)
 
     # Statystyki użycia
     usage_by_system = {}

@@ -37,21 +37,41 @@ class AluProfProfile(VendorProfile):
 
     @classmethod
     def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:
-        t = clean(code_text).upper()
-        if not t:
+        # Wycinamy wymiary " 1200mm" z końcówek (np. uszczelki progowe)
+        t = re.sub(r"\s+\d+mm\b", "", code_text, flags=re.IGNORECASE).strip()
+
+        # Odrzucamy twarde śmieci "stronicowe" Logikala
+        if "DRZWI_" in t or "OKNO_" in t or "SOLEC_" in t or "W edytorze systemu" in t:
             return ""
-        # 8000 965 D
-        m = re.search(r"\b(\d{3,4})\s+(\d{1,4})\s+([A-Z]\d?|[A-Z]{1,2}\d)\b", t)
+
+        # Zostawiamy oryginalną wielkość liter, bo upper() nam niszczył np "Wkręt do betonu"
+        # Sprawdzamy czy to czysty tekst z małymi literami - jeśli tak, to jest to opis, zwracamy bez "upper" i cięcia spacji
+        if any(c.islower() for c in t):
+            return t
+
+        # Jeśli to standardowy kod (same cyfry, duże litery)
+        t_upper = clean(t).upper()
+        clean_no_space = t_upper.replace(" ", "")
+
+        m = re.search(r"\b(\d{4})\s*(\d{3})\d\s+[A-Z0-9]+\b", t_upper)
         if m:
             return f"{m.group(1)}{m.group(2)}X"
-        # 8000 4431
-        m = re.search(r"\b(\d[A-Z0-9]{2,5})\s+(\d{1,4})\b", t)
+
+        m = re.search(r"\b(\d{3,4})\s+(\d{1,4})\s+([A-Z]\d?|[A-Z]{1,2}\d)\b", t_upper)
+        if m:
+            return f"{m.group(1)}{m.group(2)}X"
+
+        m = re.search(r"\b(\d[A-Z0-9]{2,5})\s+(\d{1,4})\b", t_upper)
         if m:
             part1, part2 = m.group(1), m.group(2)
             if len(part1) == 4 and len(part2) < 4:
                 return f"{part1}{part2.zfill(4)}"
             return f"{part1}{part2}"
-        return ""
+
+        if re.search(r"\d+", clean_no_space) and len(clean_no_space) < 15:
+            return clean_no_space
+
+        return t
 
 
 # --- REYNAERS ---
