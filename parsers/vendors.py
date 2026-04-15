@@ -55,18 +55,6 @@ class AluProfProfile(VendorProfile):
         t_upper = clean(t).upper()
         clean_no_space = t_upper.replace(" ", "")
 
-        # BUG FIX: obsługa formatu "NNNN NNNN +NNNN NNNN" (Łącznik z wkrętem)
-        # Wyciągamy wszystkie ciągi cyfr i sklejamy z '+'
-        if "+" in t_upper:
-            parts = re.split(r"\s*\+\s*", t_upper)
-            codes = []
-            for part in parts:
-                digits = re.sub(r"[^0-9]", "", part)
-                if digits:
-                    codes.append(digits)
-            if codes:
-                return "+".join(codes)
-
         m = re.search(r"\b(\d{4})\s*(\d{3})\d\s+[A-Z0-9]+\b", t_upper)
         if m:
             return f"{m.group(1)}{m.group(2)}X"
@@ -86,6 +74,40 @@ class AluProfProfile(VendorProfile):
             return clean_no_space
 
         return t
+
+    @classmethod
+    def format_hardware_desc(cls, desc_text: str) -> str:
+        if not desc_text or desc_text == "—":
+            return "—"
+
+        t = clean(desc_text)
+
+        # Szukamy pierwszego nawiasu, który zawiera zestaw kodów połączonych +
+        m = re.search(r"\(([^)]*\+[^)]*)\)", t)
+        if not m:
+            return t
+
+        inside = m.group(1)
+        parts = re.split(r"\s*\+\s*", inside)
+        codes = []
+
+        for part in parts:
+            digits = re.sub(r"[^0-9]", "", part)
+            if len(digits) == 8:
+                codes.append(digits)
+
+        # Jeśli nie znaleziono sensownych kodów, zostawiamy opis bez zmian
+        if len(codes) < 2:
+            return t
+
+        # Usuwamy nawias z kodami z bazowego opisu
+        base_desc = (t[: m.start()] + t[m.end() :]).strip()
+        base_desc = re.sub(r"\s{2,}", " ", base_desc).strip(" -,")
+
+        if not base_desc:
+            base_desc = t
+
+        return f"{base_desc}<br><i>({' + '.join(codes)})</i>"
 
 
 # --- REYNAERS ---

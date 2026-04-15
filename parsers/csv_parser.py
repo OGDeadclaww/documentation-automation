@@ -386,6 +386,9 @@ def _parse_logikal_position(
             # BUG FIX: opis jest w NASTĘPNYM wierszu (za kodem), nie w tym samym
             desc = get_desc_for_code(i + 1)
 
+            if current_section == "hardware":
+                desc = vendor_profile.format_hardware_desc(desc)
+
             target_dict = aggr_data[current_section]
             if active_code not in target_dict:
                 # Zapisujemy raw_code do wyświetlania (kody profili normalizuje zewnętrzny plik)
