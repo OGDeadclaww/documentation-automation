@@ -77,7 +77,6 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
         """Usuwa spacje, myślniki, kropki i podkreślenia do porównań."""
         return re.sub(r"[\s\-_.]", "", text).lower()
 
-    # BUG FIX #1: Nowa inteligentna funkcja ekstrakcji daty z nazwy pliku
     def _extract_date_from_name(filename: str) -> datetime.datetime | None:
         """
         Próbuje wyekstrahować datę z nazwy pliku.
@@ -108,7 +107,6 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
     special_marks = ["bp", "ei", "dpa"]
     found_special = [m for m in special_marks if m in sys_normalized]
 
-    # BUG FIX #1: Przepisana logika scoringu
     # Niższy score = lepsze dopasowanie
     # Priorytety:
     #   1 = dokładna nazwa + data w nazwie (NAJLEPSZY)
@@ -128,28 +126,20 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
         score = 10  # domyślnie odrzucony
 
         if filename_normalized == sys_normalized:
-            # Dokładna nazwa bez żadnych dodatków (plain)
             score = 3
 
         elif filename_normalized.startswith(sys_normalized):
-            # Nazwa pliku zaczyna się od sys_name + coś
             remainder = filename_normalized[len(sys_normalized) :]
-
-            # Sprawdź czy data jest w ORYGINALNEJ nazwie (przed normalizacją)
             has_date_in_name = _extract_date_from_name(name_no_ext) is not None
 
             if has_date_in_name:
-                # Najlepsze dopasowanie: dokładna nazwa + data
                 score = 1
             elif re.match(r"^[\d]+$", remainder):
-                # Sufiks czysto numeryczny (bez interpunkcji — po normalizacji)
                 score = 2
             else:
-                # Inne sufiksy
                 score = 4
 
         elif sys_normalized in filename_normalized:
-            # sys_name gdzieś w środku nazwy pliku
             if found_special and any(m in filename_normalized for m in found_special):
                 score = 4
             else:
@@ -161,10 +151,6 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
     if not matches:
         return None
 
-    # BUG FIX #1: Sortowanie dwupoziomowe
-    # Poziom 1: score (rosnąco — niższy = lepszy)
-    # Poziom 2: data w nazwie pliku (malejąco — nowszy = lepszy)
-    #           Jeśli brak daty w nazwie → używamy daty modyfikacji pliku
     def _sort_key(item):
         pdf_path, score = item
         filename = os.path.basename(pdf_path)
@@ -179,7 +165,6 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
     matches.sort(key=_sort_key)
     best_path, best_score = matches[0]
 
-    # Ustal datę do wyświetlenia (preferuj datę z nazwy)
     best_name_no_ext = os.path.splitext(os.path.basename(best_path))[0]
     date_from_name = _extract_date_from_name(best_name_no_ext)
     date_obj = date_from_name if date_from_name is not None else _get_file_mtime(best_path)
@@ -279,7 +264,7 @@ def find_base_hardware_catalog(vendor_key: str, catalog_type: str) -> dict | Non
 
 
 # ==========================================
-# WYSZUKIWANIE OKUĆ (PRZYWRÓCONE)
+# WYSZUKIWANIE OKUĆ — NAPRAWIONA WERSJA
 # ==========================================
 
 
@@ -291,9 +276,12 @@ def build_hardware_catalog_link(
     """
     Wylicza link do PDF okucia w katalogu.
     Zwraca: (link_relatywny, czy_plik_istnieje)
-    """
-    import os
 
+    Strategia wyszukiwania (od najlepszej):
+      1. Plik zaczyna się od kodu (po normalizacji: bez spacji, kropek, podkreśleń)
+      2. Plik zawiera kod gdziekolwiek w nazwie
+      3. Fallback: link do folderu systemu (istnieje=False)
+    """
     from config import CATALOGS_PATH, RELATIVE_DEPTH_TO_BASE
 
     VENDOR_CATALOG_FOLDERS = {
@@ -310,27 +298,80 @@ def build_hardware_catalog_link(
     sys_folder_upper = sys_name.upper()
     hw_dir = os.path.join(CATALOGS_PATH, vendor_folder, sys_folder_upper)
 
-    # Szukamy pliku PDF dla danego kodu okucia
-    safe_hw_code = hw_code.replace(" ", "_")
-    pdf_filename = f"{safe_hw_code}_obrobka.pdf"
-    pdf_path = os.path.join(hw_dir, pdf_filename)
+    # Normalizacja kodu do wyszukiwania: usuwamy spacje, kropki, myślniki
+    # code_normalized = hw_code.replace(" ", "").replace(".", "").replace("-", "").lower()
 
-    if os.path.isfile(pdf_path):
-        suffix = os.path.join(vendor_folder, sys_folder_upper, pdf_filename).replace("\\", "/")
-        rel_path = url_encode(f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{suffix}")
-        return rel_path, True
+    # Fallback link (używamy gdy plik nie istnieje)
+    code_for_filename = hw_code.replace(" ", "_")
+    fallback_filename = f"{code_for_filename}_obrobka.pdf"
+    fallback_link = url_encode(
+        f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{fallback_filename}"
+    )
 
-    # Fallback: szukaj bez _obrobka
-    pdf_filename_plain = f"{safe_hw_code}.pdf"
-    pdf_path_plain = os.path.join(hw_dir, pdf_filename_plain)
-    if os.path.isfile(pdf_path_plain):
-        suffix = os.path.join(vendor_folder, sys_folder_upper, pdf_filename_plain).replace(
-            "\\", "/"
+    if not os.path.isdir(hw_dir):
+        return fallback_link, False
+
+    try:
+        all_files = os.listdir(hw_dir)
+    except PermissionError:
+        return fallback_link, False
+
+    pdf_files = [f for f in all_files if f.lower().endswith(".pdf")]
+
+    if not pdf_files:
+        return fallback_link, False
+
+    # Normalizujemy nazwy plików tak samo jak kod — usuwamy spacje, kropki, myślniki, podkreślenia
+    def normalize_filename(name: str) -> str:
+        return re.sub(r"[\s._\-]", "", name).lower()
+
+    code_norm = normalize_filename(hw_code)
+
+    # Priorytet 1: nazwa pliku (bez ext) zaczyna się od znormalizowanego kodu
+    startswith_matches = []
+    for f in pdf_files:
+        name_no_ext = os.path.splitext(f)[0]
+        norm = normalize_filename(name_no_ext)
+        if norm.startswith(code_norm):
+            startswith_matches.append(f)
+
+    if startswith_matches:
+        # Jeśli kilka pasuje — weź najkrótszą nazwę (najbardziej dokładne dopasowanie)
+        startswith_matches.sort(key=lambda f: len(f))
+        found = startswith_matches[0]
+        rel_link = url_encode(
+            f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{found}"
         )
-        rel_path = url_encode(f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{suffix}")
-        return rel_path, True
+        return rel_link, True
 
-    # Brak pliku — zwróć link do folderu systemu
-    folder_suffix = os.path.join(vendor_folder, sys_folder_upper, "").replace("\\", "/")
-    rel_path = url_encode(f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{folder_suffix}")
-    return rel_path, False
+    # Priorytet 2: nazwa pliku zawiera znormalizowany kod gdziekolwiek
+    contains_matches = []
+    for f in pdf_files:
+        name_no_ext = os.path.splitext(f)[0]
+        norm = normalize_filename(name_no_ext)
+        if code_norm in norm:
+            contains_matches.append(f)
+
+    if contains_matches:
+        contains_matches.sort(key=lambda f: len(f))
+        found = contains_matches[0]
+        rel_link = url_encode(
+            f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{found}"
+        )
+        return rel_link, True
+
+    # Priorytet 3: fallback do folderu systemu
+    folder_link = url_encode(
+        f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/"
+    )
+    return folder_link, False
+
+
+def find_hardware_catalog_page(
+    vendor_key: str,
+    sys_name: str,
+    hw_code: str,
+) -> str:
+    """Kompatybilność wsteczna dla starego kodu"""
+    link, _ = build_hardware_catalog_link(vendor_key, sys_name, hw_code)
+    return link

@@ -10,8 +10,8 @@ Moduły:
 """
 
 from core.catalogs import (
-    # find_hardware_catalog_page,
     build_hardware_catalog_link,
+    find_hardware_catalog_page,
     find_system_catalog,
     get_catalog_status,
 )
