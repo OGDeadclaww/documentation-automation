@@ -35,6 +35,13 @@ def get_catalog_status(d_obj: datetime.datetime) -> tuple[str, str]:
 def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
     """
     Szuka katalogu systemowego PDF dla danego dostawcy i systemu.
+
+    Strategia wyboru (od najlepszego):
+      1. Dokładna nazwa + data w nazwie pliku (najnowsza data wygrywa)
+      2. Dokładna nazwa + jakikolwiek sufiks cyfrowy/datowy
+      3. Dokładna nazwa bez daty (plain match)
+      4. Nazwa zawiera sys_name + specjalny marker (EI, BP, DPA)
+      5. Nazwa zawiera sys_name gdziekolwiek
     """
     from config import CATALOGS_PATH, RELATIVE_DEPTH_TO_BASE
 
@@ -70,9 +77,46 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
         """Usuwa spacje, myślniki, kropki i podkreślenia do porównań."""
         return re.sub(r"[\s\-_.]", "", text).lower()
 
+    # BUG FIX #1: Nowa inteligentna funkcja ekstrakcji daty z nazwy pliku
+    def _extract_date_from_name(filename: str) -> datetime.datetime | None:
+        """
+        Próbuje wyekstrahować datę z nazwy pliku.
+        Zwraca datetime jeśli znaleziono, None jeśli brak daty w nazwie.
+        """
+        # Format: DD.MM.RRRR lub DD-MM-RRRR lub DD_MM_RRRR (np. 12.09.2025)
+        m = re.search(r"(\d{2})[-._](\d{2})[-._](\d{4})", filename)
+        if m:
+            try:
+                return datetime.datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+            except ValueError:
+                pass
+
+        # Format: RRRR-MM-DD, RRRR.MM.DD, RRRR_MM_DD
+        m = re.search(r"(\d{4})[-._](\d{2})[-._](\d{2})", filename)
+        if m:
+            try:
+                return datetime.datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except ValueError:
+                pass
+
+        return None  # Brak daty w nazwie pliku
+
+    def _get_file_mtime(filepath: str) -> datetime.datetime:
+        return datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
+
     sys_normalized = _normalize(sys_name)
     special_marks = ["bp", "ei", "dpa"]
     found_special = [m for m in special_marks if m in sys_normalized]
+
+    # BUG FIX #1: Przepisana logika scoringu
+    # Niższy score = lepsze dopasowanie
+    # Priorytety:
+    #   1 = dokładna nazwa + data w nazwie (NAJLEPSZY)
+    #   2 = dokładna nazwa + sufiks datowy/numeryczny
+    #   3 = dokładna nazwa bez daty (plain)
+    #   4 = zawiera sys_name + special marker (EI/BP/DPA)
+    #   5 = zawiera sys_name gdziekolwiek
+    #  10 = brak dopasowania (odrzucony)
 
     matches = []
 
@@ -81,22 +125,35 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
         name_no_ext = os.path.splitext(filename)[0]
         filename_normalized = _normalize(name_no_ext)
 
-        score = 10
+        score = 10  # domyślnie odrzucony
 
-        # 1. Zmieniona punktacja priorytetów!
-        if sys_normalized == filename_normalized:
-            score = 2  # Goła nazwa bez daty dostaje 2 punkty
-        elif found_special and any(m in filename_normalized for m in found_special):
-            if sys_normalized in filename_normalized:
-                score = 3
+        if filename_normalized == sys_normalized:
+            # Dokładna nazwa bez żadnych dodatków (plain)
+            score = 3
+
         elif filename_normalized.startswith(sys_normalized):
+            # Nazwa pliku zaczyna się od sys_name + coś
             remainder = filename_normalized[len(sys_normalized) :]
-            if re.match(r"^[\d]+$", remainder):
-                score = 1  # NAJWYŻSZY PRIORYTET: Nazwa + Data
+
+            # Sprawdź czy data jest w ORYGINALNEJ nazwie (przed normalizacją)
+            has_date_in_name = _extract_date_from_name(name_no_ext) is not None
+
+            if has_date_in_name:
+                # Najlepsze dopasowanie: dokładna nazwa + data
+                score = 1
+            elif re.match(r"^[\d]+$", remainder):
+                # Sufiks czysto numeryczny (bez interpunkcji — po normalizacji)
+                score = 2
             else:
+                # Inne sufiksy
                 score = 4
+
         elif sys_normalized in filename_normalized:
-            score = 5
+            # sys_name gdzieś w środku nazwy pliku
+            if found_special and any(m in filename_normalized for m in found_special):
+                score = 4
+            else:
+                score = 5
 
         if score < 10:
             matches.append((pdf_path, score))
@@ -104,35 +161,28 @@ def find_system_catalog(vendor_key: str, sys_name: str) -> dict | None:
     if not matches:
         return None
 
-    # NOWY INTELIGENTNY EKSTRAKTOR DAT
-    def _extract_date(filepath: str) -> datetime.datetime:
-        name = os.path.basename(filepath)
-        mtime = datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
+    # BUG FIX #1: Sortowanie dwupoziomowe
+    # Poziom 1: score (rosnąco — niższy = lepszy)
+    # Poziom 2: data w nazwie pliku (malejąco — nowszy = lepszy)
+    #           Jeśli brak daty w nazwie → używamy daty modyfikacji pliku
+    def _sort_key(item):
+        pdf_path, score = item
+        filename = os.path.basename(pdf_path)
+        name_no_ext = os.path.splitext(filename)[0]
+        date_from_name = _extract_date_from_name(name_no_ext)
+        if date_from_name is not None:
+            effective_date = date_from_name
+        else:
+            effective_date = _get_file_mtime(pdf_path)
+        return (score, -effective_date.timestamp())
 
-        # Format: RRRR-MM-DD, RRRR.MM.DD, RRRR_MM_DD
-        m = re.search(r"(\d{4})[-._](\d{2})[-._](\d{2})", name)
-        if m:
-            try:
-                return datetime.datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-            except ValueError:
-                pass
-
-        # Format: DD-MM-RRRR, DD.MM.RRRR, DD_MM_RRRR
-        m = re.search(r"(\d{2})[-._](\d{2})[-._](\d{4})", name)
-        if m:
-            try:
-                return datetime.datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)))
-            except ValueError:
-                pass
-
-        # Jeśli brak daty w nazwie, używamy daty modyfikacji pliku z Windows
-        return mtime
-
-    # Sortujemy: najpierw po trafności (score = 1 jest najlepszy), potem po dacie (najnowsze)
-    matches.sort(key=lambda x: (x[1], -_extract_date(x[0]).timestamp()))
+    matches.sort(key=_sort_key)
     best_path, best_score = matches[0]
 
-    date_obj = _extract_date(best_path)
+    # Ustal datę do wyświetlenia (preferuj datę z nazwy)
+    best_name_no_ext = os.path.splitext(os.path.basename(best_path))[0]
+    date_from_name = _extract_date_from_name(best_name_no_ext)
+    date_obj = date_from_name if date_from_name is not None else _get_file_mtime(best_path)
     date_str = date_obj.strftime("%d.%m.%Y")
 
     status_icon, status_text = get_catalog_status(date_obj)
@@ -260,43 +310,27 @@ def build_hardware_catalog_link(
     sys_folder_upper = sys_name.upper()
     hw_dir = os.path.join(CATALOGS_PATH, vendor_folder, sys_folder_upper)
 
-    code_normalized = hw_code.replace(" ", "_")
-    fallback_filename = f"{code_normalized}_obrobka.pdf"
-    fallback_link = (
-        f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{fallback_filename}"
-    )
+    # Szukamy pliku PDF dla danego kodu okucia
+    safe_hw_code = hw_code.replace(" ", "_")
+    pdf_filename = f"{safe_hw_code}_obrobka.pdf"
+    pdf_path = os.path.join(hw_dir, pdf_filename)
 
-    if not os.path.isdir(hw_dir):
-        return url_encode(fallback_link), False
+    if os.path.isfile(pdf_path):
+        suffix = os.path.join(vendor_folder, sys_folder_upper, pdf_filename).replace("\\", "/")
+        rel_path = url_encode(f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{suffix}")
+        return rel_path, True
 
-    code_search = hw_code.replace(" ", "").replace(".", "").lower()
+    # Fallback: szukaj bez _obrobka
+    pdf_filename_plain = f"{safe_hw_code}.pdf"
+    pdf_path_plain = os.path.join(hw_dir, pdf_filename_plain)
+    if os.path.isfile(pdf_path_plain):
+        suffix = os.path.join(vendor_folder, sys_folder_upper, pdf_filename_plain).replace(
+            "\\", "/"
+        )
+        rel_path = url_encode(f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{suffix}")
+        return rel_path, True
 
-    try:
-        all_files = os.listdir(hw_dir)
-        pdf_files = [f for f in all_files if f.lower().endswith(".pdf")]
-
-        matching_files = [
-            f
-            for f in pdf_files
-            if f.lower().replace("_", "").replace(".", "").startswith(code_search)
-        ]
-
-        if matching_files:
-            found_filename = matching_files[0]
-            rel_link = f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{vendor_folder}/{sys_folder_upper}/{found_filename}"
-            return url_encode(rel_link), True
-
-    except PermissionError:
-        pass
-
-    return url_encode(fallback_link), False
-
-
-def find_hardware_catalog_page(
-    vendor_key: str,
-    sys_name: str,
-    hw_code: str,
-) -> str:
-    """Kompatybilność wsteczna dla starego kodu"""
-    link, _ = build_hardware_catalog_link(vendor_key, sys_name, hw_code)
-    return link
+    # Brak pliku — zwróć link do folderu systemu
+    folder_suffix = os.path.join(vendor_folder, sys_folder_upper, "").replace("\\", "/")
+    rel_path = url_encode(f"{RELATIVE_DEPTH_TO_BASE}/Katalogi/{folder_suffix}")
+    return rel_path, False

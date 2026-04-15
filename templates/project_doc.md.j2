@@ -5,67 +5,103 @@ puppeteer:
 ---
 
 <style>
-    * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-    }
+    /* Globalny styl dla nagłówków tabel */
     th {
-        background-color: #393c3f !important;
+        background-color: #2c3e50 !important;
         color: #ffffff !important;
         font-weight: bold;
         text-align: center;
         padding: 8px;
     }
-</style>
 
-<img src="{{ logo_path }}" alt="Logo" style="display: block; margin: 0 auto; width: 200px;">
+    /* Parzyste wiersze na szaro (Zebra) */
+    tr:nth-child(even) {
+        background-color: #393c3f;
+        color: #ffffff !important;
+    }
+    tr:nth-child(odd) {
+        background-color: #252525;
+        color: #ffffff !important;
+    }
+
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+</style>
 
 ---
 
 <div style="text-align: center">
 
-# {{ project_client }} <br> <span style="color:red">{{ project_number }}</span> <br> {{ project_desc }}
+# {{ project_client }}{% if project_number %} {{ project_number }}{% endif %}{% if project_desc %} {{ project_desc }}{% endif %}
 
 </div>
 
+<style>
+    /* Globalny styl dla nagłówków tabel */
+    th {
+        background-color: #2c3e50 !important; /* Ciemny Granat */
+        color: #ffffff !important;           /* Biały Tekst */
+        font-weight: bold;
+        text-align: center;
+        padding: 8px;
+    }
+
+    /* Opcjonalnie: Styl dla Checklisty (żeby była wyraźniejsza) */
+    /* Jeśli chcesz, żeby checklista miała inny kolor, np. Czerwony */
+    /* table:nth-of-type(4) th { background-color: #e74c3c !important; } */
+
+    /* Parzyste wiersze na szaro (Zebra) - ułatwia czytanie */
+    tr:nth-child(even) {
+        background-color: #393c3f;
+        color: #ffffff !important;           /* Biały Tekst */
+    }
+    tr:nth-child(odd) {
+        background-color: #252525;
+        color: #ffffff !important;           /* Biały Tekst */
+    }
+</style>
+
 ---
 
-# Spis Treści
+# <span id="spis-treści" class="toc-docs">Spis Treści</span>
+
 - [Dokumentacja](#dokumentacja)
 - [==UWAGI Ogólne==](#uwagi-ogólne)
 - [📚 Katalogi Systemowe](#-katalogi-systemowe)
+- [🧮 Zestawienie Drzwi](#-zestawienie-drzwi)
 - [🔩 Tabela Okuć i Akcesoriów](#-tabela-okuć-i-akcesoriów)
-{% for system_name in systems %}
+{% for system_name, positions in systems_data.items() %}
 - [{{ system_name }}](#{{ system_name | lower | replace(' ', '-') }})
+{% for pos in positions %}
+  - [Poz. {{ pos.number }}](#poz-{{ pos.number }})
+{% endfor %}
 {% endfor %}
 - [==UWAGI KOŃCOWE==](#uwagi-końcowe)
 - [📋 Historia Zmian](#-historia-zmian)
 
 ---
 
-# <h id="dokumentacja" style="color:WHITE">Dokumentacja</h>
+# <span id="dokumentacja" class="toc-docs">Dokumentacja</span>
 
 [⬆️ Spis Treści](#spis-treści)
 
-## Dokumenty Sieciowe (Z:\)
-<div style="page-break-inside: avoid;">
+## Dokumenty Sieciowe (Z:\\)
 
 | Dokument | Data | Link |
 | :-- | :--: | :--: |
 {% for doc in documents %}{% if doc.type == 'network_remote' %}| {{ doc.name }} | {{ doc.date }} | [📄 Otwórz]({{ doc.path }}) |
 {% endif %}{% endfor %}
-</div>
 
 ---
 
-## Dokumenty Lokalne (C:\)
-<div style="page-break-inside: avoid;">
+## Dokumenty Lokalne (C:\\)
 
 | Dokument | Data | Link |
 | :-- | :--: | :--: |
 {% for doc in documents %}{% if doc.type == 'network_local' or doc.type == 'local_only' %}| {{ doc.name }} | {{ doc.date }} | [📄 Otwórz]({{ doc.path }}) |
 {% endif %}{% endfor %}
-</div>
 
 ---
 
@@ -81,13 +117,24 @@ puppeteer:
 
 [🔝 Spis Treści](#spis-treści)
 
-<div style="page-break-inside: avoid;">
-
 | System | Data wydania | Status | Katalog |
 | :-- | :--: | :--: | :--: |
 {% for cat in catalogs -%}
 | **{{ cat.name }}** | {{ cat.date }} | {{ cat.status_icon }} {{ cat.status_text }} | [📄 Otwórz]({{ cat.path }}) |
 {% endfor %}
+
+---
+
+# 🧮 Zestawienie Drzwi
+
+[🔝 Spis Treści](#spis-treści)
+
+<div style="page-break-inside: avoid;">
+
+|  |  |
+| :-- | :--: |
+| **Zestawienie Drzwi** | [📄 Otwórz](./Zestawienie_Konstrukcji.pdf) |
+
 
 </div>
 
@@ -100,10 +147,10 @@ puppeteer:
 > **Legenda:**
 > ✅ Katalog OK | 🔴 Brak w katalogu | 📐 Wymaga obróbki CNC
 
-| Kod | Opis | Rysunek | Katalog | Status | Uwagi |
-| :--: | :-- | :--: | :--: | :--: | :-- |
+| Kod | Opis | Rysunek | Ilość | Katalog | Status | Uwagi |
+| :--: | :-- | :--: | :--: | :--: | :--: | :-- |
 {% for hw in global_hardware -%}
-| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | [📄 Otwórz]({{ hw.catalog_link }}) | {{ hw.status }} | {{ hw.notes }} |
+| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | {{ hw.status }} | {{ hw.notes }} |
 {% endfor %}
 
 ---
@@ -112,46 +159,38 @@ puppeteer:
 
 [⬆️ Spis Treści](#spis-treści)
 
-<div style="page-break-inside: avoid;">
-
 | Operacja | {% for sys in systems %}{{ sys }} | {% endfor %}
 | :-- |{% for sys in systems %} :--: |{% endfor %}
 {% for instr in instructions -%}
 | {{ instr.name }} | {% for sys in systems %}{{ instr.links.get(sys, '—') }} | {% endfor %}
 {% endfor %}
 
-</div>
-
 ---
-
-<div style="page-break-before: always;"></div>
 
 {# --- PĘTLA PO SYSTEMACH --- #}
 {% for system_name, positions in systems_data.items() %}
 
-# <h id="{{ system_name | lower | replace(' ', '-') }}" style="color:GOLD">{{ system_name }}</h>
+# <span class="toc-sys">{{ system_name }}</span>
 
 ---
 
-    {# --- PĘTLA PO POZYCJACH W SYSTEMIE --- #}
-    {% for pos in positions %}
-
-## <h id="poz-{{ pos.number }}" style="color:CYAN">Poz. {{ pos.number }}</h>
+{# --- PĘTLA PO POZYCJACH W SYSTEMIE --- #}
+{% for pos in positions %}
+## <span id="poz-{{ pos.number }}" class="toc-pos">Poz. {{ pos.number }}</span>
 
 ---
 
 ### Rzut
+
 ![]({{ pos.view_image_path }})
 
 [🔝 Spis Treści](#spis-treści)
 
 ---
 
-### <h id="profile-{{ pos.number }}" style="color:MAGENTA">Profile</h>
+### <span id="profile-{{ pos.number }}" class="toc-prof">Profile</span>
 
 [🔝 Spis Treści](#spis-treści)
-
-<div style="page-break-inside: avoid;">
 
 | Kod | Opis | Rysunek | Ilość | Wymiary | Położenie |
 | :--- | :--- | :---: | :---: | :---: | :---: |
@@ -159,34 +198,31 @@ puppeteer:
 | {% if prof.quantity %}**`{{ prof.code }}`**{% else %}`{{ prof.code }}`{% endif %} | {{ prof.desc }} | ![]({{ prof.image_path }}) | {{ prof.quantity }} | {{ prof.dimensions | format_dim }} | {{ prof.location }} |
 {% endfor %}
 
-</div>
-
 ---
 
-### <h id="obrobki-{{ pos.number }}" style="color:RED">Obróbki</h>
+### <span id="obrobki-{{ pos.number }}" class="toc-work">Obróbki</span>
 
 [🔝 Spis Treści](#spis-treści)
 
 | Kod | Opis | Rysunek | Ilość | Katalog | Status | Checklista |
 | :--: | :-- | :--: | :--: | :--: | :--: | :--: |
 {% for hw in pos.hardware -%}
-| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | <span title="{{ hw.status_text }}">{{ hw.status_icon }}</span> | [📄](#checklist-{{ hw.code }}-{{ pos.number }}) |
+| `{{ hw.code }}` | {{ hw.desc }} | ![]({{ hw.image_path }}) | {{ hw.quantity }} | [📄 Otwórz]({{ hw.catalog_link }}) | {{ hw.status_icon }} | [📄](#checklist-{{ hw.checklist_id }}) |
 {% endfor %}
 
 ---
 
-        {# --- DETALE OBRÓBEK DLA POZYCJI --- #}
-        {% for hw in pos.hardware %}
-#### <span id="checklist-{{ hw.code }}-{{ pos.number }}">{{ hw.code }}</span>
+{# --- DETALE OBRÓBEK (CHECKLISTA) DLA POZYCJI --- #}
+{% for hw in pos.hardware %}
+#### <span id="checklist-{{ hw.checklist_id }}">{{ hw.code }}</span>
 - [ ] `{{ hw.code }}`  -   `{{ hw.quantity }}`
   - {{ hw.desc }}
     - [Strona z Katalogu 👈]({{ hw.catalog_link }})
-
-        {% endfor %}
+{% endfor %}
 
 ---
 
-### <h id="uwagi-do-obróbek-{{ pos.number }}" style="color:ORANGE">UWAGI do Obróbek</h>
+### <span id="uwagi-do-obrobek-{{ pos.number }}" class="toc-comm">UWAGI do Obróbek</span>
 
 [🔝 Spis Treści](#spis-treści)
 
@@ -194,18 +230,20 @@ puppeteer:
 
 ---
 
-    {% endfor %} {# Koniec pętli pozycji #}
+{% endfor %}{# Koniec pętli pozycji #}
 
 <div style="page-break-before: always;"></div>
 
-{% endfor %} {# Koniec pętli systemów #}
+{% endfor %}{# Koniec pętli systemów #}
 
 ---
 
 # ==UWAGI KOŃCOWE==
+
 - [ ] Uwaga 1
-  - [ ] Szczegóły...
-    > Położenie...
+- [ ] Szczegóły...
+
+> Położenie...
 
 ---
 
@@ -219,8 +257,6 @@ puppeteer:
 {% endfor %}
 
 ---
-
-<div style="page-break-before: auto;"></div>
 
 | | |
 | :-- | :-- |
