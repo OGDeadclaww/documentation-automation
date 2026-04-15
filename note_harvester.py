@@ -9,12 +9,11 @@ Ten moduł:
 4. Umożliwia przeglądanie i eksport uwag
 """
 
+import datetime
+import json
 import os
 import re
-import json
-import datetime
-from typing import Dict, List, Optional, Any
-
+from typing import Any
 
 # ==========================================
 # KONFIGURACJA
@@ -50,7 +49,7 @@ def get_uwagi_db_path() -> str:
 # ==========================================
 
 
-def extract_notes_from_markdown(md_file_path: str) -> List[Dict]:
+def extract_notes_from_markdown(md_file_path: str) -> list[dict]:
     """
     Wyciąga uwagi z pojedynczego pliku Markdown.
 
@@ -65,7 +64,7 @@ def extract_notes_from_markdown(md_file_path: str) -> List[Dict]:
         return notes
 
     try:
-        with open(md_file_path, "r", encoding="utf-8") as f:
+        with open(md_file_path, encoding="utf-8") as f:
             content = f.read()
             lines = content.split("\n")
     except Exception as e:
@@ -134,11 +133,7 @@ def extract_notes_from_markdown(md_file_path: str) -> List[Dict]:
                 clean_u = re.sub(r"[🔴✅📐]", "", uwagi).strip()
 
                 # Sprawdź czy to nie jest puste lub placeholder
-                if (
-                    clean_u
-                    and len(clean_u) > 3
-                    and clean_u not in ["—", "", "Brak", "N/A"]
-                ):
+                if clean_u and len(clean_u) > 3 and clean_u not in ["—", "", "Brak", "N/A"]:
                     notes.append(
                         {
                             "project_number": project_number,
@@ -148,9 +143,7 @@ def extract_notes_from_markdown(md_file_path: str) -> List[Dict]:
                             "hardware_code": code,
                             "note": clean_u,
                             "source_type": "table_uwagi",
-                            "date_extracted": datetime.datetime.now().strftime(
-                                "%d.%m.%Y"
-                            ),
+                            "date_extracted": datetime.datetime.now().strftime("%d.%m.%Y"),
                             "source_file": md_file_path,
                         }
                     )
@@ -199,7 +192,7 @@ def extract_project_number(md_file_path: str) -> str:
 def scan_projects_for_notes(
     base_path: str = None,
     recursive: bool = True,
-) -> List[Dict]:
+) -> list[dict]:
     """
     Skanuje foldery projektów w poszukiwaniu plików .md z uwagami.
     """
@@ -215,16 +208,12 @@ def scan_projects_for_notes(
     # Znajdź wszystkie pliki .md
     md_files = []
     if recursive:
-        for root, dirs, files in os.walk(base_path):
+        for root, _, files in os.walk(base_path):
             for file in files:
                 if file.endswith(".md"):
                     md_files.append(os.path.join(root, file))
     else:
-        md_files = [
-            os.path.join(base_path, f)
-            for f in os.listdir(base_path)
-            if f.endswith(".md")
-        ]
+        md_files = [os.path.join(base_path, f) for f in os.listdir(base_path) if f.endswith(".md")]
 
     print(f"📄 Znaleziono {len(md_files)} plików .md")
 
@@ -242,20 +231,20 @@ def scan_projects_for_notes(
 # ==========================================
 
 
-def load_uwagi_db() -> List[Dict]:
+def load_uwagi_db() -> list[dict]:
     """Ładuje bazę uwag z pliku JSON."""
     if not os.path.exists(UWAGI_DB_PATH):
         return []
 
     try:
-        with open(UWAGI_DB_PATH, "r", encoding="utf-8") as f:
+        with open(UWAGI_DB_PATH, encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, Exception) as e:
         print(f"⚠️ Nie można odczytać bazy uwag: {e}")
         return []
 
 
-def save_uwagi_db(notes: List[Dict]) -> bool:
+def save_uwagi_db(notes: list[dict]) -> bool:
     """Zapisuje bazę uwag do pliku JSON."""
     try:
         ensure_data_dir()
@@ -268,7 +257,7 @@ def save_uwagi_db(notes: List[Dict]) -> bool:
         return False
 
 
-def merge_uwagi_db(new_notes: List[Dict], update_existing: bool = True) -> int:
+def merge_uwagi_db(new_notes: list[dict], update_existing: bool = True) -> int:
     """
     Scal nowe uwagi z istniejącą bazą.
     """
@@ -311,7 +300,7 @@ def merge_uwagi_db(new_notes: List[Dict], update_existing: bool = True) -> int:
 # ==========================================
 
 
-def export_uwagi_to_csv(output_path: str = None) -> Optional[str]:
+def export_uwagi_to_csv(output_path: str = None) -> str | None:
     """Eksportuje bazę uwag do pliku CSV."""
     import csv
 
@@ -348,7 +337,7 @@ def export_uwagi_to_csv(output_path: str = None) -> Optional[str]:
         return None
 
 
-def get_uwagi_summary() -> Dict[str, Any]:
+def get_uwagi_summary() -> dict[str, Any]:
     """Zwraca podsumowanie bazy uwag."""
     notes = load_uwagi_db()
 
@@ -369,9 +358,7 @@ def get_uwagi_summary() -> Dict[str, Any]:
         "total": len(notes),
         "by_source_type": by_status,
         "by_project": by_project,
-        "last_extracted": (
-            max(n.get("date_extracted", "") for n in notes) if notes else None
-        ),
+        "last_extracted": (max(n.get("date_extracted", "") for n in notes) if notes else None),
     }
 
 

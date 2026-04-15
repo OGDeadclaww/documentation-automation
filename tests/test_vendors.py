@@ -4,7 +4,8 @@ Testy parsowania kodów profili i okuć.
 """
 
 import pytest
-from parsers.vendors import AluProfProfile, clean, VENDOR_PROFILES, ReynaersProfile
+
+from parsers.vendors import VENDOR_PROFILES, AluProfProfile, ReynaersProfile, clean
 
 # ============================================
 # TESTY clean()
@@ -284,9 +285,7 @@ class TestReynaersHardware:
 class TestReynaersSpecialCodes:
 
     def test_dual_color_69(self):
-        result = ReynaersProfile.parse_profile_code(
-            "408.0014.69 W:59 7047-2+Z:59 7021-2"
-        )
+        result = ReynaersProfile.parse_profile_code("408.0014.69 W:59 7047-2+Z:59 7021-2")
         assert result == "408.0014.XX"
 
     def test_consistent_profile_and_hardware(self):
@@ -298,9 +297,9 @@ class TestReynaersSpecialCodes:
             "065.6566.59 7021-2",
         ]
         for code in codes:
-            assert ReynaersProfile.parse_profile_code(
+            assert ReynaersProfile.parse_profile_code(code) == ReynaersProfile.parse_hardware_code(
                 code
-            ) == ReynaersProfile.parse_hardware_code(code)
+            )
 
 
 # ============================================

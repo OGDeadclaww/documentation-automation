@@ -37,8 +37,10 @@ class AluProfProfile(VendorProfile):
 
     @classmethod
     def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:
-        # Wycinamy wymiary " 1200mm" z końcówek (np. uszczelki progowe)
-        t = re.sub(r"\s+\d+mm\b", "", code_text, flags=re.IGNORECASE).strip()
+        # BUG FIX: wycinamy sufiks wymiaru w stylu LogiKal: " R----1200" lub " 1200mm"
+        t = code_text.strip()
+        t = re.sub(r"\s+R-{3,}\d+", "", t, flags=re.IGNORECASE).strip()
+        t = re.sub(r"\s+\d+mm\b", "", t, flags=re.IGNORECASE).strip()
 
         # Odrzucamy twarde śmieci "stronicowe" Logikala
         if "DRZWI_" in t or "OKNO_" in t or "SOLEC_" in t or "W edytorze systemu" in t:
@@ -52,6 +54,18 @@ class AluProfProfile(VendorProfile):
         # Jeśli to standardowy kod (same cyfry, duże litery)
         t_upper = clean(t).upper()
         clean_no_space = t_upper.replace(" ", "")
+
+        # BUG FIX: obsługa formatu "NNNN NNNN +NNNN NNNN" (Łącznik z wkrętem)
+        # Wyciągamy wszystkie ciągi cyfr i sklejamy z '+'
+        if "+" in t_upper:
+            parts = re.split(r"\s*\+\s*", t_upper)
+            codes = []
+            for part in parts:
+                digits = re.sub(r"[^0-9]", "", part)
+                if digits:
+                    codes.append(digits)
+            if codes:
+                return "+".join(codes)
 
         m = re.search(r"\b(\d{4})\s*(\d{3})\d\s+[A-Z0-9]+\b", t_upper)
         if m:

@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from bs4 import BeautifulSoup
 
-from config import PREFERRED_EXT_ORDER, CONFLICTS_DIR, ENABLE_CONFLICT_MODE
+from config import CONFLICTS_DIR, ENABLE_CONFLICT_MODE, PREFERRED_EXT_ORDER
 from parsers.vendors import clean
 
 # ============================================
@@ -95,7 +95,7 @@ def _parse_html(html_path: str) -> BeautifulSoup:
     if not os.path.exists(html_path):
         raise FileNotFoundError(f"Brak pliku HTML: {html_path}")
 
-    with open(html_path, "r", encoding="utf-8", errors="ignore") as f:
+    with open(html_path, encoding="utf-8", errors="ignore") as f:
         return BeautifulSoup(f.read(), "html.parser")
 
 
@@ -342,9 +342,7 @@ def rename_profiles_from_lp_html(
             renamed += 1
         basecode_to_all[base_code].add(new_filename)
 
-    print(
-        f"\n✅ Profile: skopiowano {renamed}, pominięto {skipped}, odfiltrowano {filtered}"
-    )
+    print(f"\n✅ Profile: skopiowano {renamed}, pominięto {skipped}, odfiltrowano {filtered}")
 
     if ENABLE_CONFLICT_MODE:
         _handle_conflicts(basecode_to_all, output_dir)
@@ -496,8 +494,8 @@ def _handle_conflicts(basecode_to_all, output_dir):
     moved = 0
     multi = 0
 
-    for base_code, names_set in basecode_to_all.items():
-        names = sorted(list(names_set))
+    for _, names_set in basecode_to_all.items():
+        names = sorted(names_set)
         if len(names) <= 1:
             continue
 

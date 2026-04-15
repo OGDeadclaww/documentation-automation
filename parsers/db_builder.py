@@ -32,7 +32,7 @@ def build_product_db(zm_csv_path: str) -> dict:
 
     for encoding in encodings:
         try:
-            with open(zm_csv_path, "r", encoding=encoding) as f:
+            with open(zm_csv_path, encoding=encoding) as f:
                 lines = f.readlines()
             # Test czy polskie znaki są ok (np. 'Ilość')
             sample = "".join(lines[:10])

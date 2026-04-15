@@ -193,7 +193,10 @@ def _parse_logikal_position(
             return True
         if (
             current_section == "hardware"
-            and re.match(r"^[A-Z0-9\s]+$", c0.replace("mm", "").strip())
+            # BUG FIX: dopuszczamy myślniki (sufiks R----NNNN) i znak + (Łącznik z wkrętem)
+            and re.match(
+                r"^[A-Z0-9\s\-+()]+$", re.sub(r"R-{3,}\d+", "", c0).replace("mm", "").strip()
+            )
             and len(c0) < 40
             and not c0.startswith("Kod")
         ):

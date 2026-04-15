@@ -7,10 +7,10 @@ Wybór plików, projektów, dostawców, systemów.
 import os
 import re
 import tkinter as tk
-from tkinter import filedialog, simpledialog, messagebox
 from difflib import get_close_matches
+from tkinter import filedialog, messagebox, simpledialog
 
-from config import MAX_PREFIX_LENGTH, KNOWN_SYSTEMS
+from config import KNOWN_SYSTEMS, MAX_PREFIX_LENGTH
 from parsers.vendors import VENDOR_PROFILES, list_vendors
 
 # ============================================
@@ -196,9 +196,7 @@ def select_project_from_list(projects_folder: str) -> str:
     scrollbar = tk.Scrollbar(frame)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-    listbox = tk.Listbox(
-        frame, yscrollcommand=scrollbar.set, font=("Courier", 10), height=15
-    )
+    listbox = tk.Listbox(frame, yscrollcommand=scrollbar.set, font=("Courier", 10), height=15)
     listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar.config(command=listbox.yview)
 

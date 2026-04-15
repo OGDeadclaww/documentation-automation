@@ -21,10 +21,9 @@ import sys
 # Dodaj root do path dla importów
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from gui.gui import select_file, select_folder, select_vendor
 from core.context_builder import prepare_context
 from core.document_updater import render_markdown
-
+from gui.gui import select_file, select_folder, select_vendor
 
 # ==========================================
 # MAIN — TRYB INTERAKTYWNY
