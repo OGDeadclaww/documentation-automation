@@ -13,6 +13,20 @@ POZ_LINE_RE = re.compile(r"Poz\.\s*(\d+)", re.IGNORECASE)
 SYSTEM_KEYWORDS = ["MB-", "MasterLine", "CS-", "CP-", "SlimLine", "Hi-Finity"]
 CODE_ROW_RE = re.compile(r"^K\d{2}\s+\d{4}\b", re.IGNORECASE)
 
+# BUG FIX #4: Wzorzec rozpoznający stopki stron CSV
+# Stopka ma postać: NazwaProjektu (N_strony) w pierwszej kolumnie
+PAGE_FOOTER_RE = re.compile(r"^[A-Za-z0-9_\- ]+\s*\(\d+\)\s*$")
+
+# BUG FIX #5: Słowa kluczowe identyfikujące okucia bez kodów Aluprof
+# (polskie znaki powodują że regex [A-Z0-9]+ ich nie łapie)
+SPECIAL_HARDWARE_KEYWORDS = [
+    "kołek rozporowy",
+    "wkręt do betonu",
+    "wkret do betonu",
+    "kołek",
+    "wkręt",
+]
+
 # ============================================
 # DETEKCJA FORMATU I ODCZYT
 # ============================================
@@ -26,7 +40,7 @@ def _detect_format(filepath: str) -> str:
         try:
             with open(filepath, encoding="windows-1250") as f:
                 header = f.read(1000)
-        except:
+        except Exception:
             with open(filepath, encoding="utf-8", errors="ignore") as f:
                 header = f.read(1000)
 
@@ -53,7 +67,7 @@ def _read_rows_logikal(filepath: str) -> list[list[str]]:
         try:
             with open(filepath, encoding="windows-1250") as f:
                 return list(csv.reader(f, delimiter=";"))
-        except:
+        except Exception:
             with open(filepath, encoding="utf-8", errors="ignore") as f:
                 return list(csv.reader(f, delimiter=";"))
 
@@ -103,7 +117,48 @@ def get_data_for_position(
 
 
 # ============================================
-# PARSER LOGIKAL (W KRYTYCZNYCH MIEJSCACH OPARTY O TWÓJ KOD)
+# BUG FIX #4: Detektor stopek stron CSV
+# ============================================
+
+
+def _is_page_footer(row: list[str], first_col: str) -> bool:
+    """
+    Rozpoznaje stopkę strony w pliku CSV LogiKal.
+
+    Stopka ma charakterystyczną postać:
+      Col[0]: "NazwaProjektu (N)"   — np. "Szpital_etap_8 (26)"
+    Cecha: pierwsza kolumna pasuje do wzorca NazwaProjektu (N)
+    i wiersz ma <= 6 niepustych kolumn (stopki mają dużo pustych pól).
+    """
+    if not first_col:
+        return False
+
+    if PAGE_FOOTER_RE.search(first_col):
+        non_empty = [c for c in row if c.strip()]
+        # Stopka ma najczęściej <= 6 niepustych kolumn na ~20+ kolumnach
+        if len(non_empty) <= 6:
+            return True
+
+    return False
+
+
+# ============================================
+# BUG FIX #5: Detektor specjalnych okuć bez kodów Aluprof
+# ============================================
+
+
+def _is_special_hardware_keyword(text: str) -> bool:
+    """
+    Sprawdza czy tekst to specjalne okucie bez kodu Aluprof
+    (np. 'Kołek rozporowy', 'Wkręt do betonu').
+    Polskie znaki powodują że standardowy regex [A-Z0-9]+ ich nie łapie.
+    """
+    text_lower = text.lower().strip()
+    return any(kw in text_lower for kw in SPECIAL_HARDWARE_KEYWORDS)
+
+
+# ============================================
+# PARSER LOGIKAL
 # ============================================
 
 
@@ -129,17 +184,24 @@ def _parse_logikal_position(
         if not c0:
             return False
         c0 = clean(c0)
+
+        # BUG FIX #5: specjalne okucia z polskimi znakami — sprawdzamy JAKO PIERWSZE
+        if current_section == "hardware" and _is_special_hardware_keyword(c0):
+            return True
+
         if current_section == "profiles" and CODE_ROW_RE.search(c0):
             return True
         if (
             current_section == "hardware"
             and re.match(r"^[A-Z0-9\s]+$", c0.replace("mm", "").strip())
-            and len(c0) < 30
+            and len(c0) < 40
+            and not c0.startswith("Kod")
         ):
             return True
         return False
 
     def next_significant_is_code(start_i):
+        """Sprawdza czy następny znaczący wiersz po start_i to wiersz z kodem."""
         j = start_i
         while j < len(rows):
             r = [clean(c) for c in rows[j]]
@@ -157,6 +219,23 @@ def _parse_logikal_position(
         return False
 
     def get_desc_for_code(start_i):
+        """
+        Pobiera opis dla kodu zaczynając od wiersza start_i.
+        Opis to pierwszy niepusty wiersz, który NIE jest kodem,
+        NIE jest nagłówkiem sekcji i NIE jest w liście noise.
+        """
+        noise = [
+            "Kod:",
+            "Uwagi",
+            "Bdy",
+            "Błędy",
+            "Wstawione",
+            "Do konstrukcji",
+            "Ostrzeżenia",
+            "Ostrzeenia",
+            "Wszystkie rezultaty",
+            "W edytorze systemu",
+        ]
         j = start_i
         while j < len(rows):
             nxt = [clean(c) for c in rows[j]]
@@ -167,21 +246,12 @@ def _parse_logikal_position(
             if not first:
                 j += 1
                 continue
+            # Jeśli następny znaczący wiersz to inny kod lub nagłówek sekcji — brak opisu
             if is_code_row(first) or re.match(
                 r"^(Akcesoria|Okucia|Profile)\b", first, flags=re.IGNORECASE
             ):
                 break
-            noise = [
-                "Kod:",
-                "Uwagi",
-                "Bdy",
-                "Błędy",
-                "Wstawione",
-                "Do konstrukcji",
-                "Ostrzeżenia",
-                "Wszystkie rezultaty",
-                "W edytorze systemu",
-            ]
+            # Odfiltruj znane szumy
             if any(first.startswith(n) for n in noise):
                 j += 1
                 continue
@@ -189,6 +259,9 @@ def _parse_logikal_position(
         return "—"
 
     def normalize_hardware_key(raw_code: str) -> str:
+        # BUG FIX #5: nie normalizuj specjalnych okuć z polskimi znakami
+        if _is_special_hardware_keyword(raw_code):
+            return raw_code
         if hasattr(vendor_profile, "parse_hardware_code"):
             norm = vendor_profile.parse_hardware_code(raw_code)
             return norm if norm else raw_code
@@ -246,6 +319,10 @@ def _parse_logikal_position(
 
         first_col = row[0]
 
+        # BUG FIX #4: Filtr stopek stron — PRZED noise filterem
+        if _is_page_footer(row_raw, first_col):
+            continue
+
         noise = [
             "Kod:",
             "Uwagi",
@@ -278,35 +355,37 @@ def _parse_logikal_position(
         entry_data = {"qty": qty, "dim": dim, "loc": loc}
         has_data = bool(qty or dim or loc)
 
-        # SCENARIUSZ 1: Mamy pierwszą kolumnę pustą, wjeżdżają same wymiary (sieroty lub ilości do obecnego)
+        # SCENARIUSZ 1: Pierwsza kolumna pusta — dane (sieroty lub kontynuacja)
         if not first_col:
             if has_data:
                 if next_significant_is_code(i + 1):
-                    # Za chwilę wjedzie kod, więc to jest jego "sierota"
+                    # Za chwilę wjedzie kod → to jego "sierota"
                     orphan_entries.append(entry_data)
                 elif active_code:
-                    # To są po prostu kolejne wymiary do obecnie trwającego kodu
+                    # Kolejne wymiary do obecnie aktywnego kodu
                     aggr_data[current_section][active_code]["entries"].append(entry_data)
                 else:
-                    # Awaryjnie (choć nie powinno się zdarzyć) - wisi przed wszystkim
+                    # Awaryjnie — wisi przed wszystkim
                     orphan_entries.append(entry_data)
             continue
 
         # SCENARIUSZ 2: Wiersz z KODEM
         if is_code_row(first_col):
             raw_code = first_col
-            # Używamy znormalizowanego klucza dla Okuć, by unikać duplikatów jak 1924229X
+
+            # Używamy znormalizowanego klucza (ale dla specjalnych okuć — zostawiamy oryginał)
             if current_section == "hardware":
                 norm_key = normalize_hardware_key(raw_code)
                 active_code = norm_key if norm_key else raw_code
             else:
                 active_code = raw_code
 
+            # BUG FIX: opis jest w NASTĘPNYM wierszu (za kodem), nie w tym samym
             desc = get_desc_for_code(i + 1)
 
             target_dict = aggr_data[current_section]
             if active_code not in target_dict:
-                # Zapisujemy raw_code do wyświetlania, żeby obrazki się zgadzały (kody profili normalizuje zewnętrzny plik)
+                # Zapisujemy raw_code do wyświetlania (kody profili normalizuje zewnętrzny plik)
                 target_dict[active_code] = {"code": raw_code, "desc": desc, "entries": []}
             elif target_dict[active_code]["desc"] == "—":
                 target_dict[active_code]["desc"] = desc
@@ -320,18 +399,17 @@ def _parse_logikal_position(
 
             continue
 
-        # SCENARIUSZ 3: Wiersz BEZ KODU, sam OPIS (np. Wkręt)
+        # SCENARIUSZ 3: Wiersz z opisem (nie jest kodem)
         if first_col and not is_code_row(first_col):
-            # Jeśli w kolumnie pierwszej jest jakiś opis, ale myśmy przed chwilą wpisali KOD
-            # z którym on się zgadza - zignoruj jako "już wczytany" chyba że ma nowe ilości
             if (
                 active_code
                 and aggr_data[current_section].get(active_code, {}).get("desc") == first_col
             ):
+                # Opis już wczytany — jeśli ma dane, dodaj je
                 if has_data:
                     aggr_data[current_section][active_code]["entries"].append(entry_data)
             else:
-                # Zupełnie nowy element z samym opisem (np Wkręty)
+                # Zupełnie nowy element z samym opisem (np. Wkręty, Kołek rozporowy)
                 active_code = first_col
 
                 target_dict = aggr_data[current_section]
@@ -345,8 +423,22 @@ def _parse_logikal_position(
                 if has_data:
                     target_dict[active_code]["entries"].append(entry_data)
 
-    # KONWERSJA SŁOWNIKA DO MARKDOWNA
-    for key, val in aggr_data["profiles"].items():
+    # ============================================
+    # FINALIZACJA PROFILI — <br> join (jak oryginał)
+    # ============================================
+    #
+    # LOGIKA:
+    # Każdy entry to osobny wiersz wymiarów dla tego profilu
+    # (jeden profil może mieć wiele wierszy — różne długości/lokalizacje).
+    # qty/dim/loc łączymy <br> — dokładnie jak w oryginalnym, działającym parserze.
+    #
+    # DLACZEGO NIE OBLICZAMY:
+    # LogiKal już zapisuje w CSV właściwą ilość z mnożnikiem konstrukcji:
+    #   Poz. 1 (1 szt):  "1 szt"
+    #   Poz. 2 (3 szt):  "1x3 szt", "2x3 szt"
+    # Nie ma potrzeby nic przeliczać — bierzemy wprost z CSV.
+    #
+    for _, val in aggr_data["profiles"].items():
         if not val["entries"]:
             val["entries"].append({"qty": "1 szt", "dim": "—", "loc": "—"})
 
@@ -364,23 +456,40 @@ def _parse_logikal_position(
             }
         )
 
-    for key, val in aggr_data["hardware"].items():
+    # ============================================
+    # FINALIZACJA HARDWARE — qty wprost z CSV (BUG FIX #3)
+    # ============================================
+    #
+    # LOGIKA:
+    # LogiKal już zapisuje właściwą ilość z mnożnikiem konstrukcji w kolumnie qty:
+    #   Poz. 1: "1 szt", "2 szt", "6 szt", "11 szt"
+    #   Poz. 2: "1x3 szt", "2x3 szt", "6x3 szt", "11x3 szt"
+    #
+    # Format BUG FIX #3: "4x2 szt" (4 sztuki × 2 pozycje) — ale to LOGIKAL już daje!
+    # Dla okuć SUMUJEMY entries (bo jeden kod może wystąpić w sekcji Akcesoria i Okucia
+    # w tym samym pliku), ale qty bierzemy z CSV — nie przeliczamy.
+    #
+    # JEDNAK: entries dla hardware to zazwyczaj jeden wpis na kod (okucie ma jedną ilość),
+    # więc bierzemy qty z pierwszego wpisu. Jeśli kod wystąpił kilka razy (np. w różnych
+    # sekcjach), zostaną połączone w aggr_data przez normalizację klucza.
+    #
+    for _, val in aggr_data["hardware"].items():
         if not val["entries"]:
             val["entries"].append({"qty": "1 szt", "dim": "—", "loc": "—"})
 
-        total_qty = 0
-        has_szt = False
-
-        for e in val["entries"]:
-            q_val = e["qty"]
-            if "szt" in q_val.lower():
-                has_szt = True
-                try:
-                    total_qty += int(re.sub(r"\D", "", q_val))
-                except:
-                    total_qty += 1
-
-        final_qty = f"{total_qty} szt" if has_szt and total_qty > 0 else "1 szt"
+        # Bierzemy qty bezpośrednio z CSV — LogiKal już wpisał właściwą wartość
+        # (np. "1 szt", "2 szt", "1x3 szt", "2x3 szt", "11x3 szt")
+        # Sprawdzamy czy wszystkie entries mają tę samą qty (tak powinno być)
+        # Jeśli tak — bierzemy pierwszy. Jeśli nie — łączymy <br>.
+        qty_values = [e["qty"] for e in val["entries"] if e["qty"]]
+        if not qty_values:
+            final_qty = "1 szt"
+        elif len(set(qty_values)) == 1:
+            # Wszystkie takie same — bierzemy jeden
+            final_qty = qty_values[0]
+        else:
+            # Różne wartości (rzadkie) — łączymy
+            final_qty = "<br>".join(qty_values)
 
         data["hardware"].append(
             {
@@ -557,7 +666,7 @@ def _get_reynaers_data(csv_path: str, target_pos: str, vendor_profile, product_d
             qty, dim, loc = _extract_dims_reynaers(r, col_idx)
 
             potential_inline_desc = ""
-            for i, val in enumerate(r):
+            for _, val in enumerate(r):
                 if val == new_code or val == qty or val == dim or val == loc:
                     continue
                 if len(val) > 3 and not any(c.isdigit() for c in val):
@@ -665,7 +774,7 @@ def get_positions_from_csv(csv_path: str) -> list:
     positions = []
     for pos_list in sys_map.values():
         positions.extend(pos_list)
-    return sorted(list(set(positions)), key=lambda x: int(x))
+    return sorted((set(positions)), key=lambda x: int(x))
 
 
 def extract_system_from_csv(csv_path: str) -> str:
