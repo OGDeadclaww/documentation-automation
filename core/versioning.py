@@ -29,7 +29,9 @@ except ImportError:
 # ==========================================
 
 
-def get_next_version(md_output_path: str, project_number: str) -> str:
+def get_next_version(
+    md_output_path: str, project_number: str, project_folder_name: str = ""
+) -> str:
     """
     Wylicza następną wersję dokumentacji.
 
@@ -45,43 +47,46 @@ def get_next_version(md_output_path: str, project_number: str) -> str:
     Returns:
         str: np. "1.0", "2.0", "2.1"
     """
+    import json
+    import os
+
+    from config import DOCUMENTATION_PROJECTS_PATH
+
     index_path = os.path.join(DOCUMENTATION_PROJECTS_PATH, "project_index.json")
 
-    # Odczytaj aktualną wersję z JSON
+    # KRYTYCZNA ZMIANA: Zabezpieczenie dla projektów bez numeru (jak SOLEC)
+    # Jeśli project_number to "", spacja lub "UNKNOWN", użyjmy nazwy folderu jako klucza
+    search_key = project_number.strip()
+    if not search_key or search_key == "UNKNOWN":
+        search_key = project_folder_name.strip() if project_folder_name else "UNKNOWN_PROJECT"
+
     current_version = None
     if os.path.exists(index_path):
         try:
             with open(index_path, encoding="utf-8") as f:
                 index = json.load(f)
-            current_version = index.get(project_number, {}).get("version", None)
+            current_version = index.get(search_key, {}).get("version", None)
         except (json.JSONDecodeError, KeyError):
             current_version = None
 
-    # Plik MD nie istnieje → zawsze v1.0
     if not os.path.exists(md_output_path):
         print("📄 Nowy plik MD → v1.0")
         return "1.0"
 
-    # Plik MD istnieje ale brak wersji w JSON → v2.0
     if current_version is None:
-        print("📄 Plik MD istnieje, brak wersji w JSON → v2.0")
+        print(f"📄 Plik MD istnieje, brak wersji pod kluczem '{search_key}' → v2.0")
         return "2.0"
 
-    # Parsuj aktualną wersję
     try:
         parts = current_version.split(".")
         major = int(parts[0])
         minor = int(parts[1])
     except (ValueError, IndexError):
-        print(f"⚠️ Nie można sparsować wersji '{current_version}' → v2.0")
         return "2.0"
 
-    # Wersja 1.x + plik istnieje → v2.0 (ręczna edycja → nowa major)
     if major == 1:
-        print(f"📄 Wersja {current_version} + plik istnieje → v2.0")
         return "2.0"
 
-    # Wersja 2.x+ → bump minor
     next_version = f"{major}.{minor + 1}"
     print(f"📄 Bump minor: {current_version} → {next_version}")
     return next_version
@@ -140,7 +145,14 @@ def update_project_index(context: dict, version: str) -> None:
     else:
         index = {}
 
-    proj_num = context.get("project_number") or "UNKNOWN"
+    # KRYTYCZNA ZMIANA: Identyczna logika klucza jak w get_next_version
+    raw_num = context.get("project_number", "").strip()
+    if not raw_num or raw_num == "UNKNOWN":
+        proj_num = context.get("project_folder_name", "").strip()
+        if not proj_num:
+            proj_num = "UNKNOWN_PROJECT"
+    else:
+        proj_num = raw_num
 
     # Historia wersji
     history_entry = {
@@ -150,8 +162,12 @@ def update_project_index(context: dict, version: str) -> None:
     }
 
     existing = index.get(proj_num, {})
+    # Wczytujemy historię z JSON, i DODAJEMY nowy wpis
     version_history = existing.get("version_history", [])
-    version_history.append(history_entry)
+
+    # Sprawdzamy czy ten sam wpis wersji nie istnieje (aby uniknąć dubli przy wielokrotnym puszczeniu skryptu na "sucho")
+    if not any(e.get("version") == version for e in version_history):
+        version_history.append(history_entry)
 
     # Statystyki użycia
     usage_by_system = {}

@@ -1,52 +1,415 @@
-# csv_parser.py
-import re
+"""
+Moduł odpowiedzialny za parsowanie plików CSV z różnych programów (LogiKal, ReynaPro).
+"""
+
 import csv
-from parsers.vendors import clean
+import re
+from collections import OrderedDict
+
 from parsers.db_builder import normalize_key
+from parsers.vendors import clean
 
-POZ_LINE_RE = re.compile(r"Poz\.\s*(\d+)")
+POZ_LINE_RE = re.compile(r"Poz\.\s*(\d+)", re.IGNORECASE)
 SYSTEM_KEYWORDS = ["MB-", "MasterLine", "CS-", "CP-", "SlimLine", "Hi-Finity"]
+CODE_ROW_RE = re.compile(r"^K\d{2}\s+\d{4}\b", re.IGNORECASE)
 
 # ============================================
-# POMOCNICZE
+# DETEKCJA FORMATU I ODCZYT
 # ============================================
+
+
+def _detect_format(filepath: str) -> str:
+    try:
+        with open(filepath, encoding="utf-16") as f:
+            header = f.read(1000)
+    except UnicodeError:
+        try:
+            with open(filepath, encoding="windows-1250") as f:
+                header = f.read(1000)
+        except:
+            with open(filepath, encoding="utf-8", errors="ignore") as f:
+                header = f.read(1000)
+
+    if "MB-CAD" in header or "LogiKal" in header or ";LISTA PRODUKCYJNA" in header:
+        return "logikal"
+    return "reynaers"
 
 
 def _read_csv_rows(csv_path: str) -> list:
     for encoding in ("cp1250", "utf-8"):
         try:
-            with open(csv_path, "r", encoding=encoding, errors="replace") as f:
+            with open(csv_path, encoding=encoding, errors="replace") as f:
                 return list(csv.reader(f, delimiter=";"))
         except Exception:
             continue
-    raise IOError(f"Nie można odczytać pliku: {csv_path}")
+    raise OSError(f"Nie można odczytać pliku: {csv_path}")
+
+
+def _read_rows_logikal(filepath: str) -> list[list[str]]:
+    try:
+        with open(filepath, encoding="utf-16") as f:
+            return list(csv.reader(f, delimiter=";"))
+    except UnicodeError:
+        try:
+            with open(filepath, encoding="windows-1250") as f:
+                return list(csv.reader(f, delimiter=";"))
+        except:
+            with open(filepath, encoding="utf-8", errors="ignore") as f:
+                return list(csv.reader(f, delimiter=";"))
+
+
+# ============================================
+# ROUTERY GŁÓWNE
+# ============================================
+
+
+def get_positions_with_systems(csv_path: str, *args, **kwargs) -> dict:
+    fmt = _detect_format(csv_path)
+
+    if fmt == "logikal":
+        rows = _read_rows_logikal(csv_path)
+        sys_map = {}
+        for row in rows:
+            if not row:
+                continue
+            line = ";".join(row).replace('"', "").replace("'", "")
+            m = re.search(
+                r"Poz\.\s*(\d+)\s+([A-Za-z0-9\- ]+?)\s+(Drzwi|Witryn|Okno|cianka|Ścianka|\()",
+                line,
+                re.IGNORECASE,
+            )
+            if m:
+                pos_num = m.group(1)
+                sys_name = m.group(2).strip()
+                if sys_name not in sys_map:
+                    sys_map[sys_name] = []
+                if pos_num not in sys_map[sys_name]:
+                    sys_map[sys_name].append(pos_num)
+        return sys_map
+    else:
+        return _get_reynaers_positions(csv_path)
+
+
+def get_data_for_position(
+    csv_path: str, position_number: str, vendor_profile, product_db=None, *args, **kwargs
+) -> dict:
+    fmt = _detect_format(csv_path)
+
+    if fmt == "logikal":
+        rows = _read_rows_logikal(csv_path)
+        return _parse_logikal_position(rows, str(position_number), vendor_profile)
+    else:
+        return _get_reynaers_data(csv_path, str(position_number), vendor_profile, product_db)
+
+
+# ============================================
+# PARSER LOGIKAL (W KRYTYCZNYCH MIEJSCACH OPARTY O TWÓJ KOD)
+# ============================================
+
+
+def _parse_logikal_position(
+    rows: list[list[str]], target_pos: str, vendor_profile
+) -> dict[str, list[dict]]:
+    data = {"profiles": [], "hardware": []}
+
+    in_target = False
+    current_section = None
+    qty_idx = dim_idx = pos_idx = None
+
+    # Przechowujemy dane pod znormalizowanym kodem (lub oryginalnym, jeśli normalizacja pusta)
+    aggr_data = {"profiles": OrderedDict(), "hardware": OrderedDict()}
+
+    active_code = None
+    orphan_entries = []
+
+    def is_blank_row(r):
+        return (not r) or all(not clean(c) for c in r)
+
+    def is_code_row(c0):
+        if not c0:
+            return False
+        c0 = clean(c0)
+        if current_section == "profiles" and CODE_ROW_RE.search(c0):
+            return True
+        if (
+            current_section == "hardware"
+            and re.match(r"^[A-Z0-9\s]+$", c0.replace("mm", "").strip())
+            and len(c0) < 30
+        ):
+            return True
+        return False
+
+    def next_significant_is_code(start_i):
+        j = start_i
+        while j < len(rows):
+            r = [clean(c) for c in rows[j]]
+            if is_blank_row(r):
+                j += 1
+                continue
+            line = ";".join(r)
+            if re.search(r"Poz\.\s*\d+", line, re.IGNORECASE):
+                return False
+            if r and re.match(r"^(Akcesoria|Okucia|Profile)\b", r[0], flags=re.IGNORECASE):
+                return False
+            if qty_idx is None:
+                return False
+            return is_code_row(r[0])
+        return False
+
+    def get_desc_for_code(start_i):
+        j = start_i
+        while j < len(rows):
+            nxt = [clean(c) for c in rows[j]]
+            if is_blank_row(nxt):
+                j += 1
+                continue
+            first = nxt[0]
+            if not first:
+                j += 1
+                continue
+            if is_code_row(first) or re.match(
+                r"^(Akcesoria|Okucia|Profile)\b", first, flags=re.IGNORECASE
+            ):
+                break
+            noise = [
+                "Kod:",
+                "Uwagi",
+                "Bdy",
+                "Błędy",
+                "Wstawione",
+                "Do konstrukcji",
+                "Ostrzeżenia",
+                "Wszystkie rezultaty",
+                "W edytorze systemu",
+            ]
+            if any(first.startswith(n) for n in noise):
+                j += 1
+                continue
+            return first
+        return "—"
+
+    def normalize_hardware_key(raw_code: str) -> str:
+        if hasattr(vendor_profile, "parse_hardware_code"):
+            norm = vendor_profile.parse_hardware_code(raw_code)
+            return norm if norm else raw_code
+        return raw_code
+
+    for i in range(len(rows)):
+        row_raw = rows[i]
+        row = [clean(c) for c in row_raw]
+        if is_blank_row(row):
+            continue
+
+        full_line = ";".join(row).replace('"', "")
+
+        m_poz = re.search(r"Poz\.\s*(\d+)", full_line, re.IGNORECASE)
+        if m_poz:
+            if m_poz.group(1) == target_pos:
+                in_target = True
+                current_section = None
+                active_code = None
+                orphan_entries = []
+                qty_idx = dim_idx = pos_idx = None
+                continue
+            else:
+                if in_target:
+                    in_target = False
+
+        if not in_target:
+            continue
+
+        if row and re.match(r"^Profile\b", row[0], flags=re.IGNORECASE):
+            current_section = "profiles"
+            active_code = None
+            orphan_entries = []
+            qty_idx = dim_idx = pos_idx = None
+            continue
+
+        if row and re.match(r"^(Akcesoria|Okucia)\b", row[0], flags=re.IGNORECASE):
+            current_section = "hardware"
+            active_code = None
+            orphan_entries = []
+            qty_idx = dim_idx = pos_idx = None
+            continue
+
+        if not current_section:
+            continue
+
+        if any(c.lower().startswith("kod:") for c in row):
+            qty_idx = next((k for k, c in enumerate(row) if c.lower().startswith("ilo")), None)
+            dim_idx = next((k for k, c in enumerate(row) if c.lower().startswith("wym")), None)
+            pos_idx = next((k for k, c in enumerate(row) if c.lower().startswith("po")), None)
+            continue
+
+        if qty_idx is None or dim_idx is None or pos_idx is None:
+            continue
+
+        first_col = row[0]
+
+        noise = [
+            "Kod:",
+            "Uwagi",
+            "Bdy",
+            "Błędy",
+            "Wstawione",
+            "Do konstrukcji",
+            "Ostrzeżenia",
+            "Ostrzeenia",
+            "Wszystkie rezultaty",
+            "W edytorze systemu",
+            "Masa",
+            "Powierzchnia",
+            "Obwód",
+            "Ciężar",
+            "System:",
+            "Kolor",
+            "Robocizna",
+        ]
+        if any(first_col.startswith(n) for n in noise):
+            continue
+        if "DRZWI_EI60" in first_col or "SOLEC" in first_col or "DRZWI_" in first_col:
+            if re.search(r"\(\d+\)$", first_col):
+                continue
+
+        qty = row[qty_idx] if qty_idx < len(row) else ""
+        dim = row[dim_idx] if dim_idx < len(row) else ""
+        loc = row[pos_idx] if pos_idx < len(row) else ""
+
+        entry_data = {"qty": qty, "dim": dim, "loc": loc}
+        has_data = bool(qty or dim or loc)
+
+        # SCENARIUSZ 1: Mamy pierwszą kolumnę pustą, wjeżdżają same wymiary (sieroty lub ilości do obecnego)
+        if not first_col:
+            if has_data:
+                if next_significant_is_code(i + 1):
+                    # Za chwilę wjedzie kod, więc to jest jego "sierota"
+                    orphan_entries.append(entry_data)
+                elif active_code:
+                    # To są po prostu kolejne wymiary do obecnie trwającego kodu
+                    aggr_data[current_section][active_code]["entries"].append(entry_data)
+                else:
+                    # Awaryjnie (choć nie powinno się zdarzyć) - wisi przed wszystkim
+                    orphan_entries.append(entry_data)
+            continue
+
+        # SCENARIUSZ 2: Wiersz z KODEM
+        if is_code_row(first_col):
+            raw_code = first_col
+            # Używamy znormalizowanego klucza dla Okuć, by unikać duplikatów jak 1924229X
+            if current_section == "hardware":
+                norm_key = normalize_hardware_key(raw_code)
+                active_code = norm_key if norm_key else raw_code
+            else:
+                active_code = raw_code
+
+            desc = get_desc_for_code(i + 1)
+
+            target_dict = aggr_data[current_section]
+            if active_code not in target_dict:
+                # Zapisujemy raw_code do wyświetlania, żeby obrazki się zgadzały (kody profili normalizuje zewnętrzny plik)
+                target_dict[active_code] = {"code": raw_code, "desc": desc, "entries": []}
+            elif target_dict[active_code]["desc"] == "—":
+                target_dict[active_code]["desc"] = desc
+
+            if orphan_entries:
+                target_dict[active_code]["entries"].extend(orphan_entries)
+                orphan_entries = []
+
+            if has_data:
+                target_dict[active_code]["entries"].append(entry_data)
+
+            continue
+
+        # SCENARIUSZ 3: Wiersz BEZ KODU, sam OPIS (np. Wkręt)
+        if first_col and not is_code_row(first_col):
+            # Jeśli w kolumnie pierwszej jest jakiś opis, ale myśmy przed chwilą wpisali KOD
+            # z którym on się zgadza - zignoruj jako "już wczytany" chyba że ma nowe ilości
+            if (
+                active_code
+                and aggr_data[current_section].get(active_code, {}).get("desc") == first_col
+            ):
+                if has_data:
+                    aggr_data[current_section][active_code]["entries"].append(entry_data)
+            else:
+                # Zupełnie nowy element z samym opisem (np Wkręty)
+                active_code = first_col
+
+                target_dict = aggr_data[current_section]
+                if active_code not in target_dict:
+                    target_dict[active_code] = {"code": first_col, "desc": first_col, "entries": []}
+
+                if orphan_entries:
+                    target_dict[active_code]["entries"].extend(orphan_entries)
+                    orphan_entries = []
+
+                if has_data:
+                    target_dict[active_code]["entries"].append(entry_data)
+
+    # KONWERSJA SŁOWNIKA DO MARKDOWNA
+    for key, val in aggr_data["profiles"].items():
+        if not val["entries"]:
+            val["entries"].append({"qty": "1 szt", "dim": "—", "loc": "—"})
+
+        qty_str = "<br>".join([e["qty"] if e["qty"] else "1 szt" for e in val["entries"]])
+        dim_str = "<br>".join([e["dim"] if e["dim"] else "—" for e in val["entries"]])
+        loc_str = "<br>".join([e["loc"] if e["loc"] else "—" for e in val["entries"]])
+
+        data["profiles"].append(
+            {
+                "code": val["code"],
+                "desc": val["desc"],
+                "quantity": qty_str,
+                "dimensions": dim_str,
+                "location": loc_str,
+            }
+        )
+
+    for key, val in aggr_data["hardware"].items():
+        if not val["entries"]:
+            val["entries"].append({"qty": "1 szt", "dim": "—", "loc": "—"})
+
+        total_qty = 0
+        has_szt = False
+
+        for e in val["entries"]:
+            q_val = e["qty"]
+            if "szt" in q_val.lower():
+                has_szt = True
+                try:
+                    total_qty += int(re.sub(r"\D", "", q_val))
+                except:
+                    total_qty += 1
+
+        final_qty = f"{total_qty} szt" if has_szt and total_qty > 0 else "1 szt"
+
+        data["hardware"].append(
+            {
+                "code": val["code"],
+                "desc": val["desc"],
+                "quantity": final_qty,
+                "dimensions": "—",
+                "location": "—",
+            }
+        )
+
+    return data
+
+
+# ============================================
+# STARY KOD REYNAERS (NIENARUSZONY)
+# ============================================
 
 
 def _extract_dims_reynaers(row, idx_map):
-    """Specyficzna ekstrakcja wymiarów dla Reynaers (szuka w całym wierszu)."""
-    qty = (
-        row[idx_map["qty"]]
-        if idx_map["qty"] is not None and idx_map["qty"] < len(row)
-        else ""
-    )
-    dim = (
-        row[idx_map["dim"]]
-        if idx_map["dim"] is not None and idx_map["dim"] < len(row)
-        else ""
-    )
-    loc = (
-        row[idx_map["loc"]]
-        if idx_map["loc"] is not None and idx_map["loc"] < len(row)
-        else ""
-    )
+    qty = row[idx_map["qty"]] if idx_map["qty"] is not None and idx_map["qty"] < len(row) else ""
+    dim = row[idx_map["dim"]] if idx_map["dim"] is not None and idx_map["dim"] < len(row) else ""
+    loc = row[idx_map["loc"]] if idx_map["loc"] is not None and idx_map["loc"] < len(row) else ""
 
-    # Walidacja wstępna
     if dim and not any(c.isdigit() for c in dim):
         dim = ""
     if qty and not any(c.isdigit() for c in qty):
         qty = ""
 
-    # Heurystyka (gdy kolumny się przesuną)
     if not qty:
         for val in row:
             if "szt" in val.lower():
@@ -69,12 +432,40 @@ def _extract_dims_reynaers(row, idx_map):
     return qty, dim, loc
 
 
-# ============================================
-# STRATEGIA 1: PARSER REYNAERS (Data-Driven)
-# ============================================
+def _get_reynaers_positions(csv_path: str) -> dict:
+    rows = _read_csv_rows(csv_path)
+    systems = {}
+    for row in rows:
+        line = ";".join(row)
+        if "Poz." not in line:
+            continue
+        match = POZ_LINE_RE.search(line)
+        if not match:
+            continue
+        pos = match.group(1)
+
+        system = None
+        line_upper = line.upper()
+        m = re.search(r"MASTERLINE\s*(\d+)", line_upper)
+        if m:
+            system = f"masterline-{m.group(1)}"
+        m = re.search(r"(CS|CP)-?\s*(\d+)", line_upper)
+        if m:
+            system = f"{m.group(1).lower()}-{m.group(2)}"
+        m = re.search(r"(MB-\d+\w*)", line_upper)
+        if m:
+            s = re.sub(r"\s+(HI|SI)\b.*", "", m.group(1), flags=re.IGNORECASE)
+            system = s.strip().lower()
+
+        if system:
+            if system not in systems:
+                systems[system] = []
+            systems[system].append(pos)
+    return systems
 
 
-def _parse_reynaers(rows, target_pos, product_db):
+def _get_reynaers_data(csv_path: str, target_pos: str, vendor_profile, product_db=None) -> dict:
+    rows = _read_csv_rows(csv_path)
     data = {"profiles": [], "hardware": []}
     is_target_pos = False
 
@@ -97,7 +488,6 @@ def _parse_reynaers(rows, target_pos, product_db):
     for row in rows:
         line = ";".join(row)
 
-        # 1. Pozycja
         if "Poz." in line:
             m = POZ_LINE_RE.search(line)
             if m:
@@ -113,7 +503,6 @@ def _parse_reynaers(rows, target_pos, product_db):
         if not any(r):
             continue
 
-        # 2. Nagłówki
         if "Ilo" in line and "Wymiar" in line:
             for i, col in enumerate(r):
                 cl = col.lower()
@@ -125,19 +514,16 @@ def _parse_reynaers(rows, target_pos, product_db):
                     col_idx["loc"] = i
             continue
 
-        # 3. Szukanie Kodu
         new_code = None
         for i in range(min(len(r), 3)):
             cell = r[i].strip()
             if not cell:
                 continue
-
-            # --- FILTRY REYNAERS ---
             if not any(c.isdigit() for c in cell):
                 continue
             if not cell[0].isdigit():
-                continue  # Musi startować od cyfry
-            if len(cell) > 20 and " " in cell:  # Długie opisy
+                continue
+            if len(cell) > 20 and " " in cell:
                 if any(c in "ąęśżźćńółĄĘŚŻŹĆŃÓŁ" for c in cell):
                     continue
                 if ")" in cell[:3]:
@@ -154,7 +540,6 @@ def _parse_reynaers(rows, target_pos, product_db):
                     new_code = cell
                     break
 
-        # --- A: Nowy Element ---
         if new_code:
             active_profile_code = new_code
             clean_key = normalize_key(new_code)
@@ -163,7 +548,6 @@ def _parse_reynaers(rows, target_pos, product_db):
                 active_item_type = product_db[clean_key]["type"]
                 active_profile_desc = product_db[clean_key]["desc"]
             else:
-                # Heurystyka typu
                 if new_code.startswith(("008", "030", "108", "408", "508")):
                     active_item_type = "profile"
                 else:
@@ -172,7 +556,6 @@ def _parse_reynaers(rows, target_pos, product_db):
 
             qty, dim, loc = _extract_dims_reynaers(r, col_idx)
 
-            # Inline opis (szukanie tekstu w tym samym wierszu)
             potential_inline_desc = ""
             for i, val in enumerate(r):
                 if val == new_code or val == qty or val == dim or val == loc:
@@ -183,13 +566,9 @@ def _parse_reynaers(rows, target_pos, product_db):
                         break
 
             if potential_inline_desc:
-                if (
-                    not active_profile_desc
-                    or active_profile_desc.lower() in GENERIC_DESCS
-                ):
+                if not active_profile_desc or active_profile_desc.lower() in GENERIC_DESCS:
                     active_profile_desc = potential_inline_desc
 
-            # Fix wymiaru (czy nie jest opisem?)
             if dim:
                 stripped = re.sub(r"[0-9.,\s()';:xXmM/-]", "", dim)
                 if len(stripped) > 2:
@@ -217,11 +596,9 @@ def _parse_reynaers(rows, target_pos, product_db):
                 else:
                     data["hardware"].append(entry)
 
-        # --- B: Kontynuacja (Kolejny wiersz) ---
         elif active_profile_code:
             qty, dim, loc = _extract_dims_reynaers(r, col_idx)
 
-            # Sprawdzenie czy wymiar to nie opis
             is_dim_actually_desc = False
             if dim:
                 if not any(c.isdigit() for c in dim):
@@ -234,7 +611,6 @@ def _parse_reynaers(rows, target_pos, product_db):
             if is_dim_actually_desc:
                 dim = ""
 
-            # Szukanie opisu w wierszu bez danych
             potential_desc = dim if is_dim_actually_desc else ""
             if not potential_desc and not qty and not dim:
                 for i in range(min(len(r), 2)):
@@ -246,21 +622,14 @@ def _parse_reynaers(rows, target_pos, product_db):
                         break
 
             if potential_desc:
-                if (
-                    not active_profile_desc
-                    or active_profile_desc.lower() in GENERIC_DESCS
-                ):
+                if not active_profile_desc or active_profile_desc.lower() in GENERIC_DESCS:
                     active_profile_desc = potential_desc
-                    # Update ostatniego wpisu
                     target_list = (
-                        data["profiles"]
-                        if active_item_type == "profile"
-                        else data["hardware"]
+                        data["profiles"] if active_item_type == "profile" else data["hardware"]
                     )
                     if target_list:
                         target_list[-1]["desc"] = active_profile_desc
 
-            # Walidacja danych do dodania
             is_valid_dim = False
             if dim:
                 stripped = re.sub(r"[0-9.,\s()';:xXmM-]", "", dim)
@@ -287,163 +656,26 @@ def _parse_reynaers(rows, target_pos, product_db):
 
 
 # ============================================
-# STRATEGIA 2: PARSER ALUPROF (Regex)
-# ============================================
-
-
-def _parse_aluprof(rows, target_pos, vendor_profile):
-    data = {"profiles": [], "hardware": []}
-    is_target_pos = False
-
-    for row in rows:
-        line = ";".join(row)
-
-        # 1. Pozycja
-        if "Poz." in line:
-            m = POZ_LINE_RE.search(line)
-            if m:
-                found_pos = m.group(1)
-                is_target_pos = str(found_pos) == target_pos
-            continue
-        if not is_target_pos:
-            continue
-
-        r = [clean(c) for c in row]
-        if not any(r):
-            continue
-
-        # Skanujemy pierwsze kolumny
-        for i in range(min(len(r), 3)):
-            cell = r[i].strip()
-            if not cell:
-                continue
-
-            # --- 1. Czy to Profil? (K... lub regex) ---
-            prof_code = vendor_profile.parse_profile_code(cell)
-            if prof_code:
-                # Znaleziono profil (prof_code ma już X jeśli trzeba)
-                desc = r[i + 1] if len(r) > i + 1 else "Profil"
-                qty = ""
-                dims = ""
-                # Prosta heurystyka ilości (szukamy 'szt' w prawo)
-                for val in r[i + 1 :]:
-                    if "szt" in val.lower():
-                        qty = val
-                        break
-                # Wymiar (często po ilości)
-                # (Tutaj upraszczamy, bo Aluprof jest bardziej liniowy)
-
-                data["profiles"].append(
-                    {
-                        "code": prof_code,  # Tu już jest np. K518102X
-                        "desc": desc,
-                        "quantity": qty,
-                        "dimensions": dims,
-                        "location": "—",
-                        "type": "profile",
-                    }
-                )
-                break
-
-            # --- 2. Czy to Hardware? ---
-            hw_code = vendor_profile.parse_hardware_code(cell)
-            if hw_code:
-                desc = r[i + 1] if len(r) > i + 1 else "Okucie"
-                qty = ""
-                for val in r[i + 1 :]:
-                    if "szt" in val.lower():
-                        qty = val
-                        break
-
-                data["hardware"].append(
-                    {
-                        "code": hw_code,
-                        "desc": desc,
-                        "quantity": qty,
-                        "dimensions": "",
-                        "location": "—",
-                        "type": "hardware",
-                    }
-                )
-                break
-
-    return data
-
-
-# ============================================
-# GŁÓWNY DYSPOLITER (FASADA)
-# ============================================
-
-
-def get_data_for_position(
-    csv_path: str, position_number: str, vendor_profile, product_db=None
-) -> dict:
-    rows = _read_csv_rows(csv_path)
-
-    if vendor_profile.KEY == "reynaers":
-        return _parse_reynaers(rows, str(position_number), product_db)
-    else:
-        # Aliplast, Aluprof, Generic
-        return _parse_aluprof(rows, str(position_number), vendor_profile)
-
-
-# ============================================
-# FUNKCJE PUBLICZNE (Dla rename_images.py i innych)
+# FUNKCJE PUBLICZNE (Dla rename_images itp)
 # ============================================
 
 
 def get_positions_from_csv(csv_path: str) -> list:
-    rows = _read_csv_rows(csv_path)
+    sys_map = get_positions_with_systems(csv_path)
     positions = []
-    for row in rows:
-        line = ";".join(row)
-        if "Poz." in line and any(kw in line for kw in SYSTEM_KEYWORDS):
-            match = POZ_LINE_RE.search(line)
-            if match:
-                positions.append(match.group(1))
-    return positions
-
-
-def get_positions_with_systems(csv_path: str) -> dict:
-    rows = _read_csv_rows(csv_path)
-    systems = {}
-    for row in rows:
-        line = ";".join(row)
-        if "Poz." not in line:
-            continue
-        match = POZ_LINE_RE.search(line)
-        if not match:
-            continue
-        pos = match.group(1)
-        system = _detect_system_in_line(line)
-        if system:
-            if system not in systems:
-                systems[system] = []
-            systems[system].append(pos)
-    return systems
-
-
-def _detect_system_in_line(line: str) -> str:
-    line_upper = line.upper()
-    m = re.search(r"MASTERLINE\s*(\d+)", line_upper)
-    if m:
-        return f"masterline-{m.group(1)}"
-    m = re.search(r"(CS|CP)-?\s*(\d+)", line_upper)
-    if m:
-        return f"{m.group(1).lower()}-{m.group(2)}"
-    m = re.search(r"(MB-\d+\w*)", line_upper)
-    if m:
-        s = re.sub(r"\s+(HI|SI)\b.*", "", m.group(1), flags=re.IGNORECASE)
-        return s.strip().lower()
-    return None
+    for pos_list in sys_map.values():
+        positions.extend(pos_list)
+    return sorted(list(set(positions)), key=lambda x: int(x))
 
 
 def extract_system_from_csv(csv_path: str) -> str:
-    return None  # Uproszczone (używamy get_positions_with_systems)
+    systems_map = get_positions_with_systems(csv_path)
+    if systems_map:
+        return list(systems_map.keys())[0]
+    return ""
 
 
 def extract_color_codes_from_csv(csv_path: str) -> list:
-    # (Zachowana logika wyciągania kolorów dla GUI)
     rows = _read_csv_rows(csv_path)
     colors = []
     for row in rows:
@@ -452,64 +684,45 @@ def extract_color_codes_from_csv(csv_path: str) -> list:
         for cell in row:
             if not cell or "Kolor profili:" in cell:
                 continue
-            # cell_clean = re.sub(r'[\^\\[\]\'"\(\)*]', " ", str(cell).upper()).strip()
-            # ... (uproszczona ekstrakcja, można wkleić starą jeśli potrzebna)
+            cell_clean = re.sub(r'[\^\\[\]\'"\(\)*]', " ", str(cell).upper()).strip()
+            if cell_clean and cell_clean not in colors:
+                colors.append(cell_clean)
     return colors
 
 
 def parse_hardware_from_csv(csv_path: str, vendor_profile) -> dict:
-    """
-    Używana przez rename_images.py.
-    Agreguje hardware ze wszystkich pozycji używając get_data_for_position.
-    """
-    rows = _read_csv_rows(csv_path)
-    positions = set()
-    for row in rows:
-        line = ";".join(row)
-        m = POZ_LINE_RE.search(line)
-        if m:
-            positions.add(m.group(1))
-
+    positions = get_positions_from_csv(csv_path)
     hardware_codes = {}
-
     for pos in positions:
-        # Pobieramy dane (bez product_db dla rename_images, więc działa w trybie heurystycznym)
         data = get_data_for_position(csv_path, pos, vendor_profile, product_db=None)
-
         for hw in data["hardware"]:
             raw_code = hw["code"]
             desc = hw["desc"]
 
-            # Normalizacja XX (żeby pasowało do plików)
-            normalized_code = vendor_profile.parse_hardware_code(raw_code)
+            if hasattr(vendor_profile, "parse_hardware_code"):
+                normalized_code = vendor_profile.parse_hardware_code(raw_code)
+            else:
+                normalized_code = vendor_profile.parse_profile_code(raw_code)
+
             code = normalized_code if normalized_code else raw_code
 
             if code not in hardware_codes:
                 hardware_codes[code] = {"desc": desc, "positions": set()}
-
             hardware_codes[code]["positions"].add(pos)
-
     return hardware_codes
 
 
 def get_profile_codes_by_system(csv_path: str, vendor_profile) -> dict:
-    """
-    Używana przez rename_images.py.
-    Zwraca kody profili (z X/XX) pogrupowane wg systemu.
-    """
     systems_map = get_positions_with_systems(csv_path)
     profiles_by_sys = {}
-
     for sys_name, positions in systems_map.items():
         if sys_name not in profiles_by_sys:
             profiles_by_sys[sys_name] = set()
-
         for pos in positions:
             data = get_data_for_position(csv_path, pos, vendor_profile, product_db=None)
-
             for prof in data["profiles"]:
-                # Kod z data["profiles"] jest już przetworzony przez parse_profile_code
-                # w przypadku Aluprof (K...X), więc bierzemy go wprost.
-                profiles_by_sys[sys_name].add(prof["code"])
-
+                raw_code = prof["code"]
+                norm = vendor_profile.parse_profile_code(raw_code)
+                code = norm if norm else raw_code
+                profiles_by_sys[sys_name].add(code)
     return profiles_by_sys

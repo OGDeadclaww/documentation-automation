@@ -132,24 +132,9 @@ $Shortcut.Save()
 
 
 def render_markdown(
-    context: dict,
-    output_filename: str | None = None,
-    template_name: str = "project_doc.md.j2",
+    context: dict, output_filename: str = None, template_name: str = "project_doc.md.j2"
 ) -> str | None:
-    """
-    Renderuje szablon Jinja2 do pliku MD w folderze projektu.
-
-    Args:
-        context: słownik z danymi do szablonu
-        output_filename: opcjonalna nazwa pliku wyjściowego
-        template_name: nazwa szablonu Jinja2
-
-    Returns:
-        Ścieżka do wygenerowanego pliku lub None w przypadku błędu
-    """
-    from core.versioning import get_next_version, update_project_index
-
-    # Inicjalizacja Jinja2
+    """Renderuje szablon Jinja2 do pliku MD w folderze projektu."""
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
     env.filters["format_dim"] = format_dimensions
 
@@ -159,10 +144,10 @@ def render_markdown(
         print(f"❌ Błąd ładowania szablonu: {e}")
         return None
 
-    # Nazwa pliku MD
     if output_filename is None:
         proj_folder = context.get("project_folder_name", "Dokumentacja")
-        output_filename = get_output_filename(proj_folder)
+        clean_name = strip_date_from_folder_name(proj_folder)
+        output_filename = f"{clean_name}.md"
 
     proj_folder_name = context.get("project_folder_name", "projekt")
     out_dir = os.path.join(DOCUMENTATION_PROJECTS_PATH, proj_folder_name)
@@ -170,26 +155,41 @@ def render_markdown(
     out_path = os.path.join(out_dir, output_filename)
 
     # Wylicz wersję PRZED renderowaniem
-    version = get_next_version(out_path, context.get("project_number", "UNKNOWN"))
+    from core.versioning import get_next_version, update_project_index
 
-    # Nowy wpis historii
+    version = get_next_version(out_path, context.get("project_number", "UNKNOWN"), proj_folder_name)
+
+    # === POPRAWKA HISTORII v1.0 ===
+    updated_history = context.get("version_history", [])
+
+    # Jeśli podbijamy wersję, a historia jest pusta, wstrzykujemy v1.0
+    if version != "1.0" and not updated_history:
+        try:
+            from datetime import datetime
+
+            ctime = os.path.getctime(out_path)
+            date_str = datetime.fromtimestamp(ctime).strftime("%d.%m.%Y")
+        except Exception:
+            date_str = context.get("generation_date", "Nieznana")
+
+        updated_history.append(
+            {"version": "1.0", "date": date_str, "author": "System (odtworzone)"}
+        )
+
+    # Nowy wpis historii dla obecnej generacji
     new_history_entry = {
         "version": version,
         "date": context.get("generation_date", ""),
         "author": context.get("author", ""),
     }
-
-    # Dodaj nowy wpis do historii
-    updated_history = context.get("version_history", []) + [new_history_entry]
+    updated_history.append(new_history_entry)
 
     # Zaktualizuj kontekst
     context["doc_version"] = version
     context["version_history"] = updated_history
 
-    # Renderuj
     rendered = template.render(context)
 
-    # Zapisz plik
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(rendered)
 
@@ -202,16 +202,11 @@ def render_markdown(
     # === AUTOMATYCZNY SKRÓT DLA OPERATORÓW ===
     pdf_path = context.get("pdf_output_path", "")
     project_number = context.get("project_number", "").strip()
-    project_folder_name = context.get("project_folder_name", "")
 
-    # Wylicz czystą nazwę (bez daty)
-    clean_name = strip_date_from_folder_name(project_folder_name)
+    clean_name = strip_date_from_folder_name(proj_folder_name)
 
     if pdf_path:
-        # LOGIKA NAZEWNICTWA:
-        # Jeśli mamy numer Pxxxx (Beddeleem) -> użyj go
-        # Jeśli nie (np. DRZWI_SOLEC) -> użyj nazw folderów
-        dir_name = project_number if project_number else project_folder_name
+        dir_name = project_number if project_number else proj_folder_name
         file_prefix = project_number if project_number else clean_name
 
         print("\n📂 Tworzenie skrótu dla operatorów...")

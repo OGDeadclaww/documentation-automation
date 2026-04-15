@@ -11,6 +11,7 @@ from tkinter import messagebox
 
 from auth import check_authorization, log_audit
 from config import BASE_PATH, IMAGES_DB, PROJECTS_IMAGES
+from core.versioning import get_clean_system_name
 from gui.gui import (
     confirm_detected_colors,
     get_project_prefix_from_met,
@@ -225,10 +226,15 @@ def main():
 
     for sys_name in systems_map.keys():
         profile_codes = profiles_by_system.get(sys_name, set())
-        output_profiles = os.path.join(IMAGES_DB, vendor_key, "profiles", sys_name)
+
+        # --- ZMIANA: CZYŚCIMY NAZWĘ SYSTEMU TAK SAMO JAK W DOC_GENERATOR ---
+        clean_sys_name = get_clean_system_name(sys_name).upper()
+        # -------------------------------------------------------------------
+
+        output_profiles = os.path.join(IMAGES_DB, vendor_key, "profiles", clean_sys_name)
         os.makedirs(output_profiles, exist_ok=True)
 
-        print(f"\n  📁 System: {sys_name} ({len(profile_codes)} profili)")
+        print(f"\n  📁 System: {clean_sys_name} ({len(profile_codes)} profili)")
         for code in sorted(profile_codes):
             print(f"     {code}")
 
