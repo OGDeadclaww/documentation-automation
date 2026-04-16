@@ -3,14 +3,14 @@
 Autoryzacja użytkowników i logowanie audytowe.
 """
 
-import os
-import json
 import getpass
+import json
+import os
 import socket
 from datetime import datetime
 from tkinter import messagebox
 
-from config import AUTH_FILE, AUDIT_LOG
+from config import AUDIT_LOG, AUTH_FILE
 
 # ============================================
 # AUTORYZACJA
@@ -77,7 +77,7 @@ def _load_auth_file() -> dict:
         FileNotFoundError: Gdy brak pliku
         json.JSONDecodeError: Gdy plik uszkodzony
     """
-    with open(AUTH_FILE, "r", encoding="utf-8") as f:
+    with open(AUTH_FILE, encoding="utf-8") as f:
         return json.load(f)
 
 

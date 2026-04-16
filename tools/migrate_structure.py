@@ -1,13 +1,13 @@
+import getpass
+import hashlib
+import json
 import os
 import re
 import shutil
-import json
-import hashlib
-import getpass
 import socket
-from datetime import datetime
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+from datetime import datetime
+from tkinter import messagebox, simpledialog
 
 # --- KONFIGURACJA ---
 BASE_PATH = r"Z:\Pawel_Pisarski\Dokumentacja"
@@ -33,7 +33,7 @@ def check_authorization():
         print("⚠️ Brak pliku autoryzacji. Tworzę domyślny...")
         create_default_auth_file()
 
-    with open(AUTH_FILE, "r", encoding="utf-8") as f:
+    with open(AUTH_FILE, encoding="utf-8") as f:
         auth_data = json.load(f)
 
     authorized = auth_data.get("authorized_editors", [])
@@ -47,9 +47,7 @@ def check_authorization():
             f"Autoryzowani użytkownicy: {', '.join(authorized)}\n\n"
             f"Skontaktuj się z administratorem.",
         )
-        print(
-            f"❌ BRAK UPRAWNIEŃ: Użytkownik '{current_user}' próbował uruchomić skrypt"
-        )
+        print(f"❌ BRAK UPRAWNIEŃ: Użytkownik '{current_user}' próbował uruchomić skrypt")
         log_audit(
             "UNAUTHORIZED_ACCESS_ATTEMPT",
             {"user": current_user, "script": "migrate_structure.py"},
@@ -269,7 +267,7 @@ def create_backup(base_path):
 
 def update_image_paths_in_md(md_path, project_folder_name):
     """Aktualizuje ścieżki do obrazków w pliku .md."""
-    with open(md_path, "r", encoding="utf-8", errors="ignore") as f:
+    with open(md_path, encoding="utf-8", errors="ignore") as f:
         content = f.read()
 
     replacements = [

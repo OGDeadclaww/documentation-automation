@@ -4,11 +4,12 @@ Testy parsowania plików CSV.
 """
 
 import os
+
 from csv_parser import (
-    get_positions_from_csv,
-    extract_system_from_csv,
-    extract_color_codes_from_csv,
     extract_additional_profiles_from_csv,
+    extract_color_codes_from_csv,
+    extract_system_from_csv,
+    get_positions_from_csv,
 )
 from vendors import AluProfProfile
 
@@ -33,9 +34,7 @@ class TestGetPositions:
     def test_basic(self, tmp_dir):
         csv = write_csv(
             tmp_dir,
-            "Poz. 1;;MB-78EI;Drzwi;\n"
-            "Poz. 2;;MB-78EI;Okno;\n"
-            "Poz. 5;;MB-78EI;FIX;\n",
+            "Poz. 1;;MB-78EI;Drzwi;\n" "Poz. 2;;MB-78EI;Okno;\n" "Poz. 5;;MB-78EI;FIX;\n",
         )
         result = get_positions_from_csv(csv)
         assert result == ["1", "2", "5"]
@@ -75,9 +74,7 @@ class TestExtractSystem:
 
 class TestExtractColors:
     def test_multiple_colors(self, tmp_dir):
-        csv = write_csv(
-            tmp_dir, "Kolor profili:;B4 [brązowy];I4 [czarny];D [srebrny]\n"
-        )
+        csv = write_csv(tmp_dir, "Kolor profili:;B4 [brązowy];I4 [czarny];D [srebrny]\n")
         result = extract_color_codes_from_csv(csv)
         assert "B4" in result
         assert "I4" in result
@@ -103,11 +100,7 @@ class TestAdditionalProfiles:
     def test_finds_profiles(self, tmp_dir):
         csv = write_csv(
             tmp_dir,
-            "Profile dodatkowe;\n"
-            "K51 8139;;\n"
-            "120 470;;\n"
-            "K41 PL27 4R7016;\n"
-            "Akcesoria;\n",
+            "Profile dodatkowe;\n" "K51 8139;;\n" "120 470;;\n" "K41 PL27 4R7016;\n" "Akcesoria;\n",
         )
         result = extract_additional_profiles_from_csv(csv, AluProfProfile)
         assert "K518139" in result

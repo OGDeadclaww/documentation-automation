@@ -37,8 +37,10 @@ class AluProfProfile(VendorProfile):
 
     @classmethod
     def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:
-        # Wycinamy wymiary " 1200mm" z końcówek (np. uszczelki progowe)
-        t = re.sub(r"\s+\d+mm\b", "", code_text, flags=re.IGNORECASE).strip()
+        # BUG FIX: wycinamy sufiks wymiaru w stylu LogiKal: " R----1200" lub " 1200mm"
+        t = code_text.strip()
+        t = re.sub(r"\s+R-{3,}\d+", "", t, flags=re.IGNORECASE).strip()
+        t = re.sub(r"\s+\d+mm\b", "", t, flags=re.IGNORECASE).strip()
 
         # Odrzucamy twarde śmieci "stronicowe" Logikala
         if "DRZWI_" in t or "OKNO_" in t or "SOLEC_" in t or "W edytorze systemu" in t:
@@ -72,6 +74,40 @@ class AluProfProfile(VendorProfile):
             return clean_no_space
 
         return t
+
+    @classmethod
+    def format_hardware_desc(cls, desc_text: str) -> str:
+        if not desc_text or desc_text == "—":
+            return "—"
+
+        t = clean(desc_text)
+
+        # Szukamy pierwszego nawiasu, który zawiera zestaw kodów połączonych +
+        m = re.search(r"\(([^)]*\+[^)]*)\)", t)
+        if not m:
+            return t
+
+        inside = m.group(1)
+        parts = re.split(r"\s*\+\s*", inside)
+        codes = []
+
+        for part in parts:
+            digits = re.sub(r"[^0-9]", "", part)
+            if len(digits) == 8:
+                codes.append(digits)
+
+        # Jeśli nie znaleziono sensownych kodów, zostawiamy opis bez zmian
+        if len(codes) < 2:
+            return t
+
+        # Usuwamy nawias z kodami z bazowego opisu
+        base_desc = (t[: m.start()] + t[m.end() :]).strip()
+        base_desc = re.sub(r"\s{2,}", " ", base_desc).strip(" -,")
+
+        if not base_desc:
+            base_desc = t
+
+        return f"{base_desc}<br><i>({' + '.join(codes)})</i>"
 
 
 # --- REYNAERS ---

@@ -2,9 +2,9 @@
 
 # Importy z Twojego projektu
 from gui import select_file
-from parsers.vendors import get_vendor_by_key
-from parsers.db_builder import build_product_db
 from parsers.csv_parser import get_data_for_position
+from parsers.db_builder import build_product_db
+from parsers.vendors import get_vendor_by_key
 
 
 def run_debug():
@@ -41,9 +41,7 @@ def run_debug():
     print(f"{'KOD':<20} | {'ILOŚĆ':<10} | {'WYMIAR':<30} | OPIS")
     print("-" * 100)
     for p in result["profiles"]:
-        print(
-            f"{p['code']:<20} | {p['quantity']:<10} | {p['dimensions']:<30} | {p['desc']}"
-        )
+        print(f"{p['code']:<20} | {p['quantity']:<10} | {p['dimensions']:<30} | {p['desc']}")
 
     print(f"\n🔩 OBRÓBKI/HARDWARE ({len(result['hardware'])}):")
     print("-" * 100)

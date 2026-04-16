@@ -9,24 +9,20 @@ Zawiera logikę:
 - ekstrakcji dat z nazw plików
 """
 
+import datetime
 import os
 import re
-import datetime
 import tkinter as tk
-from tkinter import Listbox, Scrollbar, SINGLE
-from typing import List, Optional, Dict
+from tkinter import SINGLE, Listbox, Scrollbar
 
 from config import ZLECENIA_LOCAL
-
 
 # ==========================================
 # WYSZUKIWANIE PROJEKTÓW
 # ==========================================
 
 
-def find_project_folder(
-    base_path: str, project_number: str, max_depth: int = 2
-) -> List[str]:
+def find_project_folder(base_path: str, project_number: str, max_depth: int = 2) -> list[str]:
     """
     Rekurencyjnie szuka folderu zawierającego numer projektu w nazwie.
 
@@ -58,7 +54,7 @@ def find_project_folder(
     return candidates
 
 
-def select_designer_and_find_project(project_number: str) -> Optional[str]:
+def select_designer_and_find_project(project_number: str) -> str | None:
     """
     Flow:
       1. Odczytuje podfoldery ZLECENIA_LOCAL → lista projektantów
@@ -194,7 +190,7 @@ def select_designer_and_find_project(project_number: str) -> Optional[str]:
         listbox2.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar2.config(command=listbox2.yview)
 
-        for i, cand in enumerate(candidates):
+        for _, cand in enumerate(candidates):
             display = os.path.basename(cand)
             listbox2.insert(tk.END, display)
 
@@ -216,9 +212,7 @@ def select_designer_and_find_project(project_number: str) -> Optional[str]:
         ok_btn2 = tk.Button(button_frame2, text="OK", command=on_select2, width=10)
         ok_btn2.pack(side=tk.LEFT, padx=5)
 
-        cancel_btn2 = tk.Button(
-            button_frame2, text="Anuluj", command=on_cancel2, width=10
-        )
+        cancel_btn2 = tk.Button(button_frame2, text="Anuluj", command=on_cancel2, width=10)
         cancel_btn2.pack(side=tk.LEFT, padx=5)
 
         root2.mainloop()
@@ -317,9 +311,7 @@ def extract_date_from_filename(filename: str, folder_name: str = "") -> str:
 # ==========================================
 
 
-def scan_project_documents(
-    doc_folder: str, project_folder_name: str = ""
-) -> List[Dict]:
+def scan_project_documents(doc_folder: str, project_folder_name: str = "") -> list[dict]:
     """
     Skanuje folder projektu — zwraca dokumenty z podziałem na typy.
 
@@ -370,19 +362,13 @@ def scan_project_documents(
             doc_type = ext[1:].upper()
             only_local = True
         elif ext == ".pdf":
-            if name_no_ext.upper().startswith("LP") or name_lower.startswith(
-                "lista produkcyjna"
-            ):
+            if name_no_ext.upper().startswith("LP") or name_lower.startswith("lista produkcyjna"):
                 label = "Lista Produkcyjna"
                 doc_type = "LP"
-            elif name_no_ext.upper().startswith("LC") or name_lower.startswith(
-                "lista cięcia"
-            ):
+            elif name_no_ext.upper().startswith("LC") or name_lower.startswith("lista cięcia"):
                 label = "Lista Cięcia"
                 doc_type = "LC"
-            elif name_no_ext.upper().startswith("RYS") or name_lower.startswith(
-                "rysunek"
-            ):
+            elif name_no_ext.upper().startswith("RYS") or name_lower.startswith("rysunek"):
                 label = "Rysunek"
                 doc_type = "RYS"
             elif name_no_ext.upper().startswith("RK") or name_lower.startswith(

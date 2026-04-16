@@ -1,9 +1,10 @@
 # tests/conftest.py
 import os
-import sys
-import pytest
-import tempfile
 import shutil
+import sys
+import tempfile
+
+import pytest
 
 # Dodaj folder scripts/ do ścieżki - działa na dysku sieciowym
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
