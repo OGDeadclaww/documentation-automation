@@ -302,6 +302,37 @@ class TestReynaersSpecialCodes:
             )
 
 
+class TestParseHardwareCode:
+    def test_listwa_dymoszczelna_zwraca_pusty(self):
+        assert AluProfProfile.parse_hardware_code("DOMATIC - Listwa dymoszczelna 600mm") == ""
+
+    def test_wycofane_listwa_zwraca_pusty(self):
+        assert (
+            AluProfProfile.parse_hardware_code("(WYCOFANE) DOMATIC - Listwa dymoszczelna 500 mm")
+            == ""
+        )
+
+    def test_kod_z_sufiksem_mm_czyszczony(self):
+        assert AluProfProfile.parse_hardware_code("80004326 1200mm") == "80004326"
+
+    def test_kolnierz_opis_zachowany(self):
+        assert AluProfProfile.parse_hardware_code("Kołek rozporowy") == "Kołek rozporowy"
+
+
+class TestFormatHardwareDesc:
+    def test_lacznik_z_wkretem_rozklada_kody(self):
+        result = AluProfProfile.format_hardware_desc("Łącznik z wkrętem (80122109 +80372710)")
+        assert "80122109" in result
+        assert "80372710" in result
+        assert "Łącznik z wkrętem" in result
+
+    def test_zwykly_opis_bez_zmian(self):
+        assert AluProfProfile.format_hardware_desc("Łącznik 42 mm") == "Łącznik 42 mm"
+
+    def test_pusty_zwraca_myslnik(self):
+        assert AluProfProfile.format_hardware_desc("") == "—"
+
+
 # ============================================
 # TESTY REJESTR DOSTAWCÓW
 # ============================================

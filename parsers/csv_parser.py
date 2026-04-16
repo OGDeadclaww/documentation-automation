@@ -157,6 +157,11 @@ def _is_special_hardware_keyword(text: str) -> bool:
     return any(kw in text_lower for kw in SPECIAL_HARDWARE_KEYWORDS)
 
 
+def _is_desc_with_inline_codes(text: str) -> bool:
+    """Rozpoznaje format: 'Opis (KOD + KOD)' — opis z kodami w nawiasie, NIE osobny rekord."""
+    return bool(re.search(r"\([0-9]+\s*\+\s*[0-9]+\)", text))
+
+
 # ============================================
 # PARSER LOGIKAL
 # ============================================
@@ -270,6 +275,7 @@ def _parse_logikal_position(
             return norm if norm else raw_code
         return raw_code
 
+    pending_hw_desc = None
     for i in range(len(rows)):
         row_raw = rows[i]
         row = [clean(c) for c in row_raw]
@@ -376,23 +382,24 @@ def _parse_logikal_position(
         if is_code_row(first_col):
             raw_code = first_col
 
-            # Używamy znormalizowanego klucza (ale dla specjalnych okuć — zostawiamy oryginał)
             if current_section == "hardware":
                 norm_key = normalize_hardware_key(raw_code)
                 active_code = norm_key if norm_key else raw_code
             else:
                 active_code = raw_code
 
-            # BUG FIX: opis jest w NASTĘPNYM wierszu (za kodem), nie w tym samym
-            desc = get_desc_for_code(i + 1)
-
-            if current_section == "hardware":
-                desc = vendor_profile.format_hardware_desc(desc)
+            # Opis: albo z pending (inline kody), albo z następnego wiersza
+            if current_section == "hardware" and pending_hw_desc:
+                desc = vendor_profile.format_hardware_desc(pending_hw_desc)
+                pending_hw_desc = None
+            else:
+                desc = get_desc_for_code(i + 1)
+                if current_section == "hardware":
+                    desc = vendor_profile.format_hardware_desc(desc)
 
             target_dict = aggr_data[current_section]
             if active_code not in target_dict:
-                # Zapisujemy raw_code do wyświetlania (kody profili normalizuje zewnętrzny plik)
-                target_dict[active_code] = {"code": raw_code, "desc": desc, "entries": []}
+                target_dict[active_code] = {"code": active_code, "desc": desc, "entries": []}
             elif target_dict[active_code]["desc"] == "—":
                 target_dict[active_code]["desc"] = desc
 
@@ -407,6 +414,16 @@ def _parse_logikal_position(
 
         # SCENARIUSZ 3: Wiersz z opisem (nie jest kodem)
         if first_col and not is_code_row(first_col):
+
+            # Opisy vendor-specific (np. "DOMATIC - Listwa...") — zapamiętaj jako pending
+            if current_section == "hardware" and _is_desc_with_inline_codes(first_col):
+                pending_hw_desc = first_col
+                continue
+
+            # Odrzucamy opisy z myślnikiem " - " (np. "DOMATIC - Listwa...")
+            if current_section == "hardware" and re.search(r"\s-\s", first_col):
+                continue
+
             if (
                 active_code
                 and aggr_data[current_section].get(active_code, {}).get("desc") == first_col
