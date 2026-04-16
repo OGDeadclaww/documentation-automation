@@ -167,6 +167,17 @@ def _is_desc_with_inline_codes(text: str) -> bool:
 # ============================================
 
 
+def normalize_hardware_key_standalone(raw_code, vendor_profile):
+    from parsers.csv_parser import _is_special_hardware_keyword
+
+    if _is_special_hardware_keyword(raw_code):
+        return raw_code
+    if hasattr(vendor_profile, "parse_hardware_code"):
+        norm = vendor_profile.parse_hardware_code(raw_code)
+        return norm if norm else raw_code
+    return raw_code
+
+
 def _parse_logikal_position(
     rows: list[list[str]], target_pos: str, vendor_profile
 ) -> dict[str, list[dict]]:
@@ -250,12 +261,17 @@ def _parse_logikal_position(
         ]
         j = start_i
         while j < len(rows):
-            nxt = [clean(c) for c in rows[j]]
+            nxt_raw = rows[j]
+            nxt = [clean(c) for c in nxt_raw]
             if is_blank_row(nxt):
                 j += 1
                 continue
             first = nxt[0]
             if not first:
+                j += 1
+                continue
+            # BUG FIX: stopka strony NIE jest opisem
+            if _is_page_footer(nxt_raw, first):
                 j += 1
                 continue
             # Jeśli następny znaczący wiersz to inny kod lub nagłówek sekcji — brak opisu
@@ -288,7 +304,7 @@ def _parse_logikal_position(
 
         full_line = ";".join(row).replace('"', "")
 
-        m_poz = re.search(r"Poz\.\s*(\d+)", full_line, re.IGNORECASE)
+        m_poz = re.search(r"Poz\.\s*(\w+)", full_line, re.IGNORECASE)
         if m_poz:
             if m_poz.group(1) == target_pos:
                 in_target = True
@@ -436,9 +452,12 @@ def _parse_logikal_position(
                 if has_data:
                     aggr_data[current_section][active_code]["entries"].append(entry_data)
             else:
-                # Zupełnie nowy element z samym opisem (np. Wkręty, Kołek rozporowy)
-                active_code = first_col
+                # NOWE: w sekcji hardware, opis bez danych → pending_hw_desc
+                if current_section == "hardware" and not has_data:
+                    pending_hw_desc = first_col
+                    continue
 
+                active_code = first_col
                 target_dict = aggr_data[current_section]
                 if active_code not in target_dict:
                     target_dict[active_code] = {"code": first_col, "desc": first_col, "entries": []}

@@ -169,3 +169,66 @@ class TestIsCodeRow:
         hw = result["hardware"]
         # Jeśli byłby kodem, byłby kluczem w hw — nie powinien nim być
         assert not any("Łącznik z wkrętem" in item["code"] for item in hw)
+
+
+ROWS_LACZNIK_OSCIEZNICOWY_BEZ_KODU = [
+    ["Poz. X"],
+    ["Akcesoria"],
+    ["Kod:", "", "", "", "Ilość", "Wymiary", "", "", "Położenie"],
+    # opis który pasuje do _is_special_hardware_keyword ale NIE ma kodu po sobie
+    ["Łącznik ościeżnicowy 68x16 mm", "", ""],
+    ["80322073", "", "", "", "4 szt", "", "", "", "1"],
+]
+
+ROWS_LACZNIK_OSCIEZNICOWY_OPIS_PRZED_KODEM = [
+    ["Poz. Y"],
+    ["Akcesoria"],
+    ["Kod:", "", "", "", "Ilość", "Wymiary", "", "", "Położenie"],
+    ["Łącznik ościeżnicowy 68x16 mm", "", ""],
+    # TEN wiersz nie ma żadnego kodu numerycznego po opisie
+]
+
+
+class TestOpiszBezKoduNieTrafia:
+    def test_opis_hardware_bez_kodu_nie_tworzy_rekordu_z_opisem_jako_kodem(self):
+        """Opis-tylko wiersz nigdy nie może stać się rekordem z code==desc"""
+        result = _parse_logikal_position(ROWS_LACZNIK_OSCIEZNICOWY_BEZ_KODU, "X", AluProfProfile)
+        hw = result["hardware"]
+        # Nie może być rekordu gdzie code == "Łącznik ościeżnicowy 68x16 mm"
+        assert not any(
+            item["code"] == "Łącznik ościeżnicowy 68x16 mm" for item in hw
+        ), f"Znaleziono błędny rekord: {[i for i in hw if i['code'] == 'Łącznik ościeżnicowy 68x16 mm']}"
+
+    def test_opis_hardware_przypisany_do_nastepnego_kodu(self):
+        """Opis powinien trafić jako pending_hw_desc do następnego kodu"""
+        result = _parse_logikal_position(ROWS_LACZNIK_OSCIEZNICOWY_BEZ_KODU, "X", AluProfProfile)
+        hw = result["hardware"]
+        item = next((i for i in hw if "80322073" in i["code"]), None)
+        assert item is not None, "Brak rekordu 80322073"
+        assert "Łącznik ościeżnicowy 68x16 mm" in item["desc"]
+
+
+ROWS_OPIS_BEZ_DANYCH = [
+    ["Poz. Z"],
+    ["Akcesoria"],
+    ["Kod:", "", "", "", "Ilość", "Wymiary", "", "", "Położenie"],
+    # Wiersz opisu — brak danych w kolumnach
+    ["Łącznik ościeżnicowy 68x16 mm", "", "", "", "", "", "", "", ""],
+    ["80322073", "", "", "", "4 szt", "", "", "", "1"],
+]
+
+
+class TestOpiszBezDanychJakoPendingDesc:
+    def test_opis_bez_danych_ustawia_pending_desc(self):
+        """Wiersz opisu bez ilości/wymiarów → pending_hw_desc, nie nowy rekord"""
+        result = _parse_logikal_position(ROWS_OPIS_BEZ_DANYCH, "Z", AluProfProfile)
+        hw = result["hardware"]
+        assert not any(item["code"] == "Łącznik ościeżnicowy 68x16 mm" for item in hw)
+
+    def test_pending_desc_przypisany_do_nastepnego_kodu(self):
+        """pending_hw_desc trafia do desc następnego kodu numerycznego"""
+        result = _parse_logikal_position(ROWS_OPIS_BEZ_DANYCH, "Z", AluProfProfile)
+        hw = result["hardware"]
+        item = next((i for i in hw if "80322073" in i["code"]), None)
+        assert item is not None, "Brak rekordu 80322073"
+        assert "Łącznik ościeżnicowy" in item["desc"]
