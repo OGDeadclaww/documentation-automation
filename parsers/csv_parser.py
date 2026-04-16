@@ -296,6 +296,7 @@ def _parse_logikal_position(
         return raw_code
 
     pending_hw_desc = None
+    last_fetched_desc = None
     for i in range(len(rows)):
         row_raw = rows[i]
         row = [clean(c) for c in row_raw]
@@ -414,6 +415,7 @@ def _parse_logikal_position(
                 pending_hw_desc = None
             else:
                 desc = get_desc_for_code(i + 1)
+                last_fetched_desc = desc  # ← zapamiętaj co właśnie pobrałeś
                 if current_section == "hardware":
                     desc = vendor_profile.format_hardware_desc(desc)
 
@@ -437,7 +439,8 @@ def _parse_logikal_position(
 
             # MUSI BYĆ PIERWSZE — opis z inline kodami (np. "Łącznik z wkrętem (80122109 +80372710)")
             if current_section == "hardware" and _is_desc_with_inline_codes(first_col):
-                pending_hw_desc = first_col
+                if first_col != last_fetched_desc:  # ← nie nadpisuj jeśli właśnie pobrany
+                    pending_hw_desc = first_col
                 continue
 
             # Odrzucamy opisy vendor-specific z myślnikiem " - "

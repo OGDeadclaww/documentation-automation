@@ -232,3 +232,111 @@ class TestOpiszBezDanychJakoPendingDesc:
         item = next((i for i in hw if "80322073" in i["code"]), None)
         assert item is not None, "Brak rekordu 80322073"
         assert "Łącznik ościeżnicowy" in item["desc"]
+
+
+# ============================================
+# _parse_logikal_position — hardware desc
+# ============================================
+
+
+class TestParseLogikalHardwareDesc:
+    """
+    Testy sprawdzające poprawność przypisania desc do kodów okuć.
+    Weryfikuje dwa known bugs:
+      1. Stopka strony (np. 'Szpital_etap_8 (15)') wyciekająca jako desc
+      2. Przesunięcie desc o jeden wiersz gdy dwa kolejne kody mają
+         podobną nazwę handlową (np. Łącznik z wkrętem)
+    """
+
+    def _make_rows(self, entries):
+        rows = [
+            ["Poz. 1", "", "MB-78EI", "Drzwi", "", "", "", "", "", ""],
+            ["Okucia", "", "", "", "", "", "", "", "", ""],
+            ["Kod:", "Rysunek", "", "", "Ilość", "Wymiary", "", "", "Położenie", ""],
+        ]
+        for entry in entries:
+            code, qty, desc = entry[:3]
+            loc = entry[3] if len(entry) > 3 else ""
+            rows.append(["", "", "", "", qty, "", "", "", loc, ""])
+            rows.append([code, "", "", "", "", "", "", "", "", ""])
+            rows.append([desc, "", "", "", "", "", "", "", "", ""])
+        rows.append(["Poz. 2", "", "MB-78EI", "Okno", "", "", "", "", "", ""])
+        return rows
+
+    def test_distinct_desc_for_similar_connector_names(self):
+        """
+        Dwa kody łączników z prawie identyczną nazwą handlową —
+        każdy powinien dostać swój własny opis, nie opis poprzedniego.
+        """
+        from parsers.csv_parser import _parse_logikal_position
+        from parsers.vendors import AluProfProfile
+
+        rows = self._make_rows(
+            [
+                ("8012 2214 ", "8 szt", "Łącznik z wkrętem (80122109 +80372710)", "A..B"),
+                ("8012 2215 ", "4 szt", "Łącznik z wkrętem (80122111 +80372710)", "1+3..4"),
+                ("8032 2073 ", "18 szt", "Łącznik ościeżnicowy 68x16 mm", "1..2+4"),
+            ]
+        )
+
+        result = _parse_logikal_position(rows, "1", AluProfProfile)
+        hw = {h["code"]: h["desc"] for h in result["hardware"]}
+
+        assert "80122214" in hw
+        assert "80122215" in hw
+        assert "80322073" in hw
+
+        # Każdy kod musi mieć swój unikalny opis
+        assert "80122109" in hw["80122214"]
+        assert "80122111" in hw["80122215"]
+        assert hw["80322073"] == "Łącznik ościeżnicowy 68x16 mm"
+
+    def test_page_footer_not_leaked_as_desc(self):
+        from parsers.csv_parser import _parse_logikal_position
+        from parsers.vendors import AluProfProfile
+
+        rows = [
+            ["Poz. 1", "", "MB-78EI", "Drzwi", "", "", "", "", "", ""],
+            ["Okucia", "", "", "", "", "", "", "", "", ""],
+            ["Kod:", "Rysunek", "", "", "Ilość", "Wymiary", "", "", "Położenie", ""],
+            ["", "", "", "", "11 szt", "", "", "", "", ""],
+            ["8043 504X", "", "", "", "", "", "", "", "", ""],
+            ["Zaślepka otworu o14 mm[czarny mat]", "", "", "", "", "", "", "", "", ""],
+            ["", "", "", "", "11 szt", "", "", "", "", ""],
+            ["Kołek rozporowy", "", "", "", "", "", "", "", "", ""],
+            ["Szpital_etap_8 (15)", "", "", "", "", "", "", "", "", ""],
+            ["", "", "", "", "1 szt", "", "", "", "", ""],
+            ["8000 4318 ", "", "", "", "", "", "", "", "", ""],
+            ["Wkładka bębenkowa 35/35 mm", "", "", "", "", "", "", "", "", ""],
+            ["Poz. 2", "", "MB-78EI", "Okno", "", "", "", "", "", ""],
+        ]
+
+        result = _parse_logikal_position(rows, "1", AluProfProfile)
+        hw = {h["code"]: h["desc"] for h in result["hardware"]}
+
+        assert hw.get("Kołek rozporowy") == "—"
+        assert hw.get("80004318") == "Wkładka bębenkowa 35/35 mm"
+
+    def test_no_desc_shift_after_page_footer(self):
+        from parsers.csv_parser import _parse_logikal_position
+        from parsers.vendors import AluProfProfile
+
+        rows = [
+            ["Poz. 1", "", "MB-78EI", "Drzwi", "", "", "", "", "", ""],
+            ["Okucia", "", "", "", "", "", "", "", "", ""],
+            ["Kod:", "Rysunek", "", "", "Ilość", "Wymiary", "", "", "Położenie", ""],
+            ["", "", "", "", "2 szt", "", "", "", "", ""],
+            ["8012 4123 ", "", "", "", "", "", "", "", "", ""],
+            ["Łącznik 31 mm", "", "", "", "", "", "", "", "", ""],
+            ["Szpital_etap_8 (99)", "", "", "", "", "", "", "", "", ""],
+            ["", "", "", "", "1 szt", "", "", "", "", ""],
+            ["8000 4318 ", "", "", "", "", "", "", "", "", ""],
+            ["Wkładka bębenkowa 35/35 mm", "", "", "", "", "", "", "", "", ""],
+            ["Poz. 2", "", "MB-78EI", "Okno", "", "", "", "", "", ""],
+        ]
+
+        result = _parse_logikal_position(rows, "1", AluProfProfile)
+        hw = {h["code"]: h["desc"] for h in result["hardware"]}
+
+        assert hw.get("80124123") == "Łącznik 31 mm"
+        assert hw.get("80004318") == "Wkładka bębenkowa 35/35 mm"
