@@ -190,7 +190,11 @@ def _parse_logikal_position(
             return False
         c0 = clean(c0)
 
-        # BUG FIX #5: specjalne okucia z polskimi znakami — sprawdzamy JAKO PIERWSZE
+        # NOWE: jeśli to opis z inline kodami — NIE jest kodem
+        if current_section == "hardware" and _is_desc_with_inline_codes(c0):
+            return False
+
+        # BUG FIX #5: specjalne okucia z polskimi znakami
         if current_section == "hardware" and _is_special_hardware_keyword(c0):
             return True
 
@@ -415,12 +419,12 @@ def _parse_logikal_position(
         # SCENARIUSZ 3: Wiersz z opisem (nie jest kodem)
         if first_col and not is_code_row(first_col):
 
-            # Opisy vendor-specific (np. "DOMATIC - Listwa...") — zapamiętaj jako pending
+            # MUSI BYĆ PIERWSZE — opis z inline kodami (np. "Łącznik z wkrętem (80122109 +80372710)")
             if current_section == "hardware" and _is_desc_with_inline_codes(first_col):
                 pending_hw_desc = first_col
                 continue
 
-            # Odrzucamy opisy z myślnikiem " - " (np. "DOMATIC - Listwa...")
+            # Odrzucamy opisy vendor-specific z myślnikiem " - "
             if current_section == "hardware" and re.search(r"\s-\s", first_col):
                 continue
 

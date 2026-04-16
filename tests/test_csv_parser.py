@@ -127,3 +127,45 @@ def test_lacznik_ma_opis():
     hw = result["hardware"]
     codes = [item["code"] for item in hw]
     assert "80122214" in codes  # ← bez replace(), pełna asercja
+
+
+ROWS_LACZNIK_Z_OPISEM = [
+    ["Poz. 1"],
+    ["Akcesoria"],
+    ["Kod:", "", "", "", "Ilość", "Wymiary", "", "", "Położenie"],
+    # Opis z inline kodami PRZED numerycznym kodem
+    ["Łącznik z wkrętem (80122109 +80372710)", "", ""],
+    ["8012 2214", "", "", "", "4 szt", "", "", "", "1+3..4"],
+]
+
+
+class TestInlineCodeDesc:
+    def test_opis_z_inline_kodami_trafia_jako_desc(self):
+        """Wiersz 'Łącznik z wkrętem (80122109 +80372710)' nie może być osobnym rekordem"""
+        result = _parse_logikal_position(ROWS_LACZNIK_Z_OPISEM, "1", AluProfProfile)
+        hw = result["hardware"]
+        codes = [item["code"] for item in hw]
+
+        # Nie może być osobnym wpisem
+        assert "Łącznik z wkrętem (80122109 +80372710)" not in codes
+
+    def test_opis_z_inline_kodami_przypisany_do_kodu(self):
+        """Opis powinien trafić do pola desc rekordu 80122214"""
+        result = _parse_logikal_position(ROWS_LACZNIK_Z_OPISEM, "1", AluProfProfile)
+        hw = result["hardware"]
+        item = next((i for i in hw if "80122214" in i["code"].replace(" ", "")), None)
+
+        assert item is not None, "Brak rekordu z kodem 80122214"
+        assert "80122109" in item["desc"]
+        assert "80372710" in item["desc"]
+
+
+class TestIsCodeRow:
+    """Testujemy zachowanie is_code_row przez obserwację wyników parsowania"""
+
+    def test_opis_z_inline_kodami_nie_jest_kodem(self):
+        """'Łącznik z wkrętem (...)' nie może być traktowany jako kod"""
+        result = _parse_logikal_position(ROWS_LACZNIK_Z_OPISEM, "1", AluProfProfile)
+        hw = result["hardware"]
+        # Jeśli byłby kodem, byłby kluczem w hw — nie powinien nim być
+        assert not any("Łącznik z wkrętem" in item["code"] for item in hw)
