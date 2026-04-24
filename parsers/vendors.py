@@ -37,17 +37,22 @@ class AluProfProfile(VendorProfile):
 
     @classmethod
     def parse_hardware_code(cls, code_text: str, color_suffix=None) -> str:
-        # BUG FIX: wycinamy sufiks wymiaru w stylu LogiKal: " R----1200" lub " 1200mm"
-        t = code_text.strip()
-        t = re.sub(r"\s+R-{3,}\d+", "", t, flags=re.IGNORECASE).strip()
-        t = re.sub(r"\s+\d+mm\b", "", t, flags=re.IGNORECASE).strip()
+        # ZMIANA: dodano clean() jako pierwszą operację + \b w R-{3,} + nowy check myślnika
+        t = clean(code_text)  # ← NOWA LINIA
+        t = re.sub(
+            r"\s+R-{3,}\d+\b", "", t, flags=re.IGNORECASE
+        ).strip()  # ← było: code_text, bez \b
+        t = re.sub(r"\s+\d+mm\b", "", t, flags=re.IGNORECASE).strip()  # ← bez zmian
+
+        # NOWY CHECK: odrzucamy opisy z myślnikiem otoczonym spacjami (np. "DOMATIC - Listwa...")
+        if re.search(r"\s-\s", t):  # ← NOWA LINIA
+            return ""  # ← NOWA LINIA
 
         # Odrzucamy twarde śmieci "stronicowe" Logikala
         if "DRZWI_" in t or "OKNO_" in t or "SOLEC_" in t or "W edytorze systemu" in t:
             return ""
 
         # Zostawiamy oryginalną wielkość liter, bo upper() nam niszczył np "Wkręt do betonu"
-        # Sprawdzamy czy to czysty tekst z małymi literami - jeśli tak, to jest to opis, zwracamy bez "upper" i cięcia spacji
         if any(c.islower() for c in t):
             return t
 

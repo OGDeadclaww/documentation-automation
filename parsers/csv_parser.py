@@ -157,9 +157,25 @@ def _is_special_hardware_keyword(text: str) -> bool:
     return any(kw in text_lower for kw in SPECIAL_HARDWARE_KEYWORDS)
 
 
+def _is_desc_with_inline_codes(text: str) -> bool:
+    """Rozpoznaje format: 'Opis (KOD + KOD)' — opis z kodami w nawiasie, NIE osobny rekord."""
+    return bool(re.search(r"\([0-9]+\s*\+\s*[0-9]+\)", text))
+
+
 # ============================================
 # PARSER LOGIKAL
 # ============================================
+
+
+def normalize_hardware_key_standalone(raw_code, vendor_profile):
+    from parsers.csv_parser import _is_special_hardware_keyword
+
+    if _is_special_hardware_keyword(raw_code):
+        return raw_code
+    if hasattr(vendor_profile, "parse_hardware_code"):
+        norm = vendor_profile.parse_hardware_code(raw_code)
+        return norm if norm else raw_code
+    return raw_code
 
 
 def _parse_logikal_position(
@@ -185,7 +201,11 @@ def _parse_logikal_position(
             return False
         c0 = clean(c0)
 
-        # BUG FIX #5: specjalne okucia z polskimi znakami — sprawdzamy JAKO PIERWSZE
+        # NOWE: jeśli to opis z inline kodami — NIE jest kodem
+        if current_section == "hardware" and _is_desc_with_inline_codes(c0):
+            return False
+
+        # BUG FIX #5: specjalne okucia z polskimi znakami
         if current_section == "hardware" and _is_special_hardware_keyword(c0):
             return True
 
@@ -226,6 +246,9 @@ def _parse_logikal_position(
         Pobiera opis dla kodu zaczynając od wiersza start_i.
         Opis to pierwszy niepusty wiersz, który NIE jest kodem,
         NIE jest nagłówkiem sekcji i NIE jest w liście noise.
+
+        BUG FIX: sprawdza najpierw opis inline w wierszu z kodem
+        (kolumna 3 lub 4), np. "8000 4327  640mm  DOMATIC - Listwa dymoszczelna 640mm"
         """
         noise = [
             "Kod:",
@@ -239,14 +262,40 @@ def _parse_logikal_position(
             "Wszystkie rezultaty",
             "W edytorze systemu",
         ]
+
+        # === NOWE: sprawdź opis inline w wierszu POPRZEDZAJĄCYM start_i (tj. w wierszu z kodem) ===
+        if start_i > 0:
+            code_row = [clean(c) for c in rows[start_i - 1]]
+            # Kolumna 3 (indeks 3) to zazwyczaj opis, kolumna 2 (indeks 2) to rozmiar/ilość
+            # Przykład: ["1 sztB", "8000 4327", "640mm", "DOMATIC - Listwa dymoszczelna 640mm", ...]
+            for col_idx in (3, 4):
+                if col_idx < len(code_row):
+                    candidate = code_row[col_idx]
+                    if (
+                        candidate
+                        and not is_code_row(candidate)
+                        and not _is_page_footer(rows[start_i - 1], candidate)
+                        and not re.match(
+                            r"^(Akcesoria|Okucia|Profile)\b", candidate, flags=re.IGNORECASE
+                        )
+                        and not any(candidate.startswith(n) for n in noise)
+                    ):
+                        return candidate
+
+        # === ORYGINALNA LOGIKA: szukaj w kolejnych wierszach ===
         j = start_i
         while j < len(rows):
-            nxt = [clean(c) for c in rows[j]]
+            nxt_raw = rows[j]
+            nxt = [clean(c) for c in nxt_raw]
             if is_blank_row(nxt):
                 j += 1
                 continue
             first = nxt[0]
             if not first:
+                j += 1
+                continue
+            # BUG FIX: stopka strony NIE jest opisem
+            if _is_page_footer(nxt_raw, first):
                 j += 1
                 continue
             # Jeśli następny znaczący wiersz to inny kod lub nagłówek sekcji — brak opisu
@@ -270,6 +319,8 @@ def _parse_logikal_position(
             return norm if norm else raw_code
         return raw_code
 
+    pending_hw_desc = None
+    last_fetched_desc = None
     for i in range(len(rows)):
         row_raw = rows[i]
         row = [clean(c) for c in row_raw]
@@ -278,7 +329,7 @@ def _parse_logikal_position(
 
         full_line = ";".join(row).replace('"', "")
 
-        m_poz = re.search(r"Poz\.\s*(\d+)", full_line, re.IGNORECASE)
+        m_poz = re.search(r"Poz\.\s*(\w+)", full_line, re.IGNORECASE)
         if m_poz:
             if m_poz.group(1) == target_pos:
                 in_target = True
@@ -362,13 +413,10 @@ def _parse_logikal_position(
         if not first_col:
             if has_data:
                 if next_significant_is_code(i + 1):
-                    # Za chwilę wjedzie kod → to jego "sierota"
                     orphan_entries.append(entry_data)
                 elif active_code:
-                    # Kolejne wymiary do obecnie aktywnego kodu
                     aggr_data[current_section][active_code]["entries"].append(entry_data)
                 else:
-                    # Awaryjnie — wisi przed wszystkim
                     orphan_entries.append(entry_data)
             continue
 
@@ -376,24 +424,33 @@ def _parse_logikal_position(
         if is_code_row(first_col):
             raw_code = first_col
 
-            # Używamy znormalizowanego klucza (ale dla specjalnych okuć — zostawiamy oryginał)
             if current_section == "hardware":
                 norm_key = normalize_hardware_key(raw_code)
                 active_code = norm_key if norm_key else raw_code
             else:
                 active_code = raw_code
 
-            # BUG FIX: opis jest w NASTĘPNYM wierszu (za kodem), nie w tym samym
-            desc = get_desc_for_code(i + 1)
+            if current_section == "hardware" and pending_hw_desc:
+                desc = pending_hw_desc
+                pending_hw_desc = None
+            else:
+                desc = get_desc_for_code(i + 1)
+                last_fetched_desc = desc
+
+            if current_section == "hardware":
+                desc = vendor_profile.format_hardware_desc(desc)
 
             if current_section == "hardware":
                 desc = vendor_profile.format_hardware_desc(desc)
 
             target_dict = aggr_data[current_section]
             if active_code not in target_dict:
-                # Zapisujemy raw_code do wyświetlania (kody profili normalizuje zewnętrzny plik)
-                target_dict[active_code] = {"code": raw_code, "desc": desc, "entries": []}
-            elif target_dict[active_code]["desc"] == "—":
+                target_dict[active_code] = {
+                    "code": raw_code,
+                    "desc": desc,
+                    "entries": [],
+                }
+            elif target_dict[active_code]["desc"] == "—" and desc:
                 target_dict[active_code]["desc"] = desc
 
             if orphan_entries:
@@ -407,17 +464,29 @@ def _parse_logikal_position(
 
         # SCENARIUSZ 3: Wiersz z opisem (nie jest kodem)
         if first_col and not is_code_row(first_col):
+
+            # MUSI BYĆ PIERWSZE — opis z inline kodami (np. "Łącznik z wkrętem (80122109 +80372710)")
+            if current_section == "hardware" and _is_desc_with_inline_codes(first_col):
+                if first_col != last_fetched_desc:
+                    pending_hw_desc = first_col
+                continue
+
+            # Odrzucamy opisy vendor-specific z myślnikiem " - "
+            if current_section == "hardware" and re.search(r"\s-\s", first_col):
+                continue
+
             if (
                 active_code
                 and aggr_data[current_section].get(active_code, {}).get("desc") == first_col
             ):
-                # Opis już wczytany — jeśli ma dane, dodaj je
                 if has_data:
                     aggr_data[current_section][active_code]["entries"].append(entry_data)
             else:
-                # Zupełnie nowy element z samym opisem (np. Wkręty, Kołek rozporowy)
-                active_code = first_col
+                if current_section == "hardware" and not has_data:
+                    pending_hw_desc = first_col
+                    continue
 
+                active_code = first_col
                 target_dict = aggr_data[current_section]
                 if active_code not in target_dict:
                     target_dict[active_code] = {"code": first_col, "desc": first_col, "entries": []}
