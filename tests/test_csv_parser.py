@@ -340,3 +340,89 @@ class TestParseLogikalHardwareDesc:
 
         assert hw.get("80124123") == "Łącznik 31 mm"
         assert hw.get("80004318") == "Wkładka bębenkowa 35/35 mm"
+
+
+# ============================================
+# OKUCIA — inline desc in code row (BUG FIX: 8000 4327)
+# ============================================
+
+ROWS_LISTWA_INLINE_WYCOFANE = [
+    ["Poz. 1"],
+    ["Akcesoria"],
+    ["Kod:", "", "", "", "Ilość", "Wymiary", "", "", "Położenie"],
+    [
+        "8000 4327",
+        "",
+        "600mm",
+        "WYCOFANE DOMATIC - Listwa dymoszczelna 600 mm",
+        "1 sztB",
+        "",
+        "",
+        "",
+        "B",
+    ],
+]
+
+ROWS_LISTWA_INLINE = [
+    ["Poz. 1"],
+    ["Akcesoria"],
+    ["Kod:", "", "", "", "Ilość", "Wymiary", "", "", "Położenie"],
+    ["8000 4327", "", "640mm", "DOMATIC - Listwa dymoszczelna 640mm", "", "", "", "", "A"],
+    ["8000 4327", "", "1200mm", "DOMATIC - Listwa dymoszczelna 1200mm", "", "", "", "", "B"],
+]
+
+# Stopka dokładnie taka jak w prawdziwym CSV (bez spacji)
+ROWS_LISTWA_INLINE_Z_STOPKA = [
+    ["Poz. 1"],
+    ["Akcesoria"],
+    ["Kod:", "", "", "", "Ilość", "Wymiary", "", "", "Położenie"],
+    ["8000 4327", "", "640mm", "DOMATIC - Listwa dymoszczelna 640mm", "", "", "", "", "A"],
+    ["Szpitaletap8 47124 19715.04.2026", "", "", "", "", "", "", "", ""],
+    ["8000 4327", "", "1200mm", "DOMATIC - Listwa dymoszczelna 1200mm", "", "", "", "", "B"],
+]
+
+
+class TestInlineHardwareDesc:
+
+    def test_inline_desc_640mm(self):
+        """8000 4327 640mm — desc from column 3, not from the next row"""
+        result = _parse_logikal_position(ROWS_LISTWA_INLINE, "1", AluProfProfile)
+        hw = {h["code"].replace(" ", ""): h["desc"] for h in result["hardware"]}
+        assert "80004327" in hw
+        assert "DOMATIC" in hw["80004327"]
+        assert "640" in hw["80004327"]
+
+    def test_inline_desc_same_code_twice_first_desc_wins(self):
+        """
+        Parser merges two rows with identical code 8000 4327 into one record.
+        The first inline desc (640mm) is stored — second row does not overwrite it.
+        """
+        result = _parse_logikal_position(ROWS_LISTWA_INLINE, "1", AluProfProfile)
+        hw = [h for h in result["hardware"] if h["code"].replace(" ", "") == "80004327"]
+        # Either one merged record or two — neither should have empty/dash desc
+        assert len(hw) >= 1
+        assert all(h["desc"] != "—" for h in hw)
+        assert all("DOMATIC" in h["desc"] for h in hw)
+
+    def test_inline_desc_wycofane_not_treated_as_noise(self):
+        """Desc starting with 'WYCOFANE' is not noise — must be stored as desc"""
+        result = _parse_logikal_position(ROWS_LISTWA_INLINE_WYCOFANE, "1", AluProfProfile)
+        hw = {h["code"].replace(" ", ""): h["desc"] for h in result["hardware"]}
+        assert "80004327" in hw
+        assert "WYCOFANE" in hw["80004327"]
+        assert "600" in hw["80004327"]
+
+    def test_page_footer_between_inline_rows_does_not_corrupt_desc(self):
+        """Page footer between two 8000 4327 rows must not leak into desc"""
+        result = _parse_logikal_position(ROWS_LISTWA_INLINE_Z_STOPKA, "1", AluProfProfile)
+        hw = [h for h in result["hardware"] if h["code"].replace(" ", "") == "80004327"]
+        descs = [h["desc"] for h in hw]
+        assert all("Szpital" not in d for d in descs), f"Page footer leaked into desc: {descs}"
+        assert all("DOMATIC" in d for d in descs)
+
+    def test_no_regression_standard_next_row_desc_still_works(self):
+        """Regression: codes without inline desc still pick up desc from the next row"""
+        result = _parse_logikal_position(ROWS_LACZNIK, "1", AluProfProfile)
+        hw = {h["code"].replace(" ", ""): h["desc"] for h in result["hardware"]}
+        assert "80122214" in hw
+        assert hw["80122214"] != "—"

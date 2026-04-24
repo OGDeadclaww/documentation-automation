@@ -246,6 +246,9 @@ def _parse_logikal_position(
         Pobiera opis dla kodu zaczynając od wiersza start_i.
         Opis to pierwszy niepusty wiersz, który NIE jest kodem,
         NIE jest nagłówkiem sekcji i NIE jest w liście noise.
+
+        BUG FIX: sprawdza najpierw opis inline w wierszu z kodem
+        (kolumna 3 lub 4), np. "8000 4327  640mm  DOMATIC - Listwa dymoszczelna 640mm"
         """
         noise = [
             "Kod:",
@@ -259,6 +262,27 @@ def _parse_logikal_position(
             "Wszystkie rezultaty",
             "W edytorze systemu",
         ]
+
+        # === NOWE: sprawdź opis inline w wierszu POPRZEDZAJĄCYM start_i (tj. w wierszu z kodem) ===
+        if start_i > 0:
+            code_row = [clean(c) for c in rows[start_i - 1]]
+            # Kolumna 3 (indeks 3) to zazwyczaj opis, kolumna 2 (indeks 2) to rozmiar/ilość
+            # Przykład: ["1 sztB", "8000 4327", "640mm", "DOMATIC - Listwa dymoszczelna 640mm", ...]
+            for col_idx in (3, 4):
+                if col_idx < len(code_row):
+                    candidate = code_row[col_idx]
+                    if (
+                        candidate
+                        and not is_code_row(candidate)
+                        and not _is_page_footer(rows[start_i - 1], candidate)
+                        and not re.match(
+                            r"^(Akcesoria|Okucia|Profile)\b", candidate, flags=re.IGNORECASE
+                        )
+                        and not any(candidate.startswith(n) for n in noise)
+                    ):
+                        return candidate
+
+        # === ORYGINALNA LOGIKA: szukaj w kolejnych wierszach ===
         j = start_i
         while j < len(rows):
             nxt_raw = rows[j]
@@ -389,13 +413,10 @@ def _parse_logikal_position(
         if not first_col:
             if has_data:
                 if next_significant_is_code(i + 1):
-                    # Za chwilę wjedzie kod → to jego "sierota"
                     orphan_entries.append(entry_data)
                 elif active_code:
-                    # Kolejne wymiary do obecnie aktywnego kodu
                     aggr_data[current_section][active_code]["entries"].append(entry_data)
                 else:
-                    # Awaryjnie — wisi przed wszystkim
                     orphan_entries.append(entry_data)
             continue
 
@@ -409,20 +430,24 @@ def _parse_logikal_position(
             else:
                 active_code = raw_code
 
-            # Opis: albo z pending (inline kody), albo z następnego wiersza
             if current_section == "hardware" and pending_hw_desc:
-                desc = vendor_profile.format_hardware_desc(pending_hw_desc)
+                desc = pending_hw_desc
                 pending_hw_desc = None
             else:
                 desc = get_desc_for_code(i + 1)
-                last_fetched_desc = desc  # ← zapamiętaj co właśnie pobrałeś
-                if current_section == "hardware":
-                    desc = vendor_profile.format_hardware_desc(desc)
+                last_fetched_desc = desc
+
+            if current_section == "hardware":
+                desc = vendor_profile.format_hardware_desc(desc)
 
             target_dict = aggr_data[current_section]
             if active_code not in target_dict:
-                target_dict[active_code] = {"code": active_code, "desc": desc, "entries": []}
-            elif target_dict[active_code]["desc"] == "—":
+                target_dict[active_code] = {
+                    "code": raw_code,
+                    "desc": desc,
+                    "entries": [],
+                }
+            elif target_dict[active_code]["desc"] == "—" and desc:
                 target_dict[active_code]["desc"] = desc
 
             if orphan_entries:
@@ -439,7 +464,7 @@ def _parse_logikal_position(
 
             # MUSI BYĆ PIERWSZE — opis z inline kodami (np. "Łącznik z wkrętem (80122109 +80372710)")
             if current_section == "hardware" and _is_desc_with_inline_codes(first_col):
-                if first_col != last_fetched_desc:  # ← nie nadpisuj jeśli właśnie pobrany
+                if first_col != last_fetched_desc:
                     pending_hw_desc = first_col
                 continue
 
@@ -451,11 +476,9 @@ def _parse_logikal_position(
                 active_code
                 and aggr_data[current_section].get(active_code, {}).get("desc") == first_col
             ):
-                # Opis już wczytany — jeśli ma dane, dodaj je
                 if has_data:
                     aggr_data[current_section][active_code]["entries"].append(entry_data)
             else:
-                # NOWE: w sekcji hardware, opis bez danych → pending_hw_desc
                 if current_section == "hardware" and not has_data:
                     pending_hw_desc = first_col
                     continue

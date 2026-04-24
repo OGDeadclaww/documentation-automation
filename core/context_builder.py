@@ -153,6 +153,7 @@ def get_hardware_for_position(
     for hw in pos_data["hardware"]:
         raw_code = hw["code"]
         desc = hw["desc"]
+        print(f"[DEBUG hw] raw={raw_code!r} desc={desc!r}")
 
         if hasattr(vendor_cls, "parse_hardware_code"):
             normalized_code = vendor_cls.parse_hardware_code(raw_code)
@@ -162,21 +163,23 @@ def get_hardware_for_position(
         display_code = normalized_code if normalized_code else raw_code
 
         # BUG FIX #2: Kotwice — underscore zamiast spacji
-        # checklist_id używa _ separatora zamiast spacji
         checklist_id = f"{display_code.replace(' ', '_')}-{pos_num}"
 
-        # Dodaj do globalnej mapy z ilością
-        if display_code not in all_hardware_map:
-            all_hardware_map[display_code] = {
+        # BUG FIX: klucz globalny uwzględnia opis — ten sam kod z różnym opisem
+        # (np. 80004327 640mm vs 80004327 1200mm) to osobne rekordy w tabeli zbiorczej
+        global_key = f"{display_code}||{desc}"
+
+        if global_key not in all_hardware_map:
+            all_hardware_map[global_key] = {
+                "code": display_code,
                 "desc": desc,
                 "sys_name": sys_name,
                 "total_qty": 0,
-                "qty_entries": [],  # UPDATE #3: zbieramy qty per pozycja
+                "qty_entries": [],
             }
 
-        # UPDATE #3: Zbieramy ilości per pozycja do globalnej tabeli
         qty_raw = hw["quantity"] if hw["quantity"] else "1 szt"
-        all_hardware_map[display_code]["qty_entries"].append(qty_raw)
+        all_hardware_map[global_key]["qty_entries"].append(qty_raw)
 
         safe_code = display_code.replace(" ", "%20")
 
@@ -194,12 +197,11 @@ def get_hardware_for_position(
                 "file_exists": file_exists,
                 "status_icon": status_icon,
                 "status_text": status_text,
-                # BUG FIX #2: używamy checklist_id z _ zamiast spacji
                 "checklist_id": checklist_id,
             }
         )
 
-    hardware_list.sort(key=lambda x: x["code"])
+    hardware_list.sort(key=lambda x: (x["code"], x["desc"]))
     return hardware_list
 
 
@@ -438,7 +440,9 @@ def prepare_context(
         context["systems_data"][sys_name] = system_entries
 
     # UPDATE #3: Globalna tabela okuć z agregowanymi ilościami ze wszystkich pozycji
-    for code, meta in sorted(all_hardware_map.items()):
+    # BUG FIX: iterujemy po global_key (kod||opis), code i desc wyciągamy z meta
+    for _key, meta in sorted(all_hardware_map.items(), key=lambda x: (x[1]["code"], x[1]["desc"])):
+        code = meta["code"]
         desc = meta["desc"]
         sys_name = meta["sys_name"]
         img_path = f"../../images_db/{vendor_key}/hardware/{code}.jpg"
@@ -446,14 +450,13 @@ def prepare_context(
         status_icon = "✅" if file_exists else "🔴"
         status_text = "Katalog OK" if file_exists else "Brak w katalogu"
 
-        # UPDATE #3: Agreguj ilości ze wszystkich pozycji
         aggregated_qty = _aggregate_global_qty(meta.get("qty_entries", []))
 
         context["global_hardware"].append(
             {
                 "code": code,
                 "desc": desc,
-                "quantity": aggregated_qty,  # UPDATE #3: łączna ilość
+                "quantity": aggregated_qty,
                 "image_path": img_path.replace(" ", "%20"),
                 "catalog_link": catalog_link,
                 "file_exists": file_exists,
