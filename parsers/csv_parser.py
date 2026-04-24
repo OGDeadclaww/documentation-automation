@@ -6,6 +6,7 @@ import csv
 import re
 from collections import OrderedDict
 
+from core.versioning import get_clean_system_name
 from parsers.db_builder import normalize_key
 from parsers.vendors import clean
 
@@ -83,22 +84,51 @@ def get_positions_with_systems(csv_path: str, *args, **kwargs) -> dict:
     if fmt == "logikal":
         rows = _read_rows_logikal(csv_path)
         sys_map = {}
-        for row in rows:
+        current_pos = None
+
+        for i, row in enumerate(rows):
             if not row:
                 continue
-            line = ";".join(row).replace('"', "").replace("'", "")
-            m = re.search(
-                r"Poz\.\s*(\d+)\s+([A-Za-z0-9\- ]+?)\s+(Drzwi|Witryn|Okno|cianka|Ścianka|\()",
-                line,
-                re.IGNORECASE,
-            )
-            if m:
-                pos_num = m.group(1)
-                sys_name = m.group(2).strip()
-                if sys_name not in sys_map:
-                    sys_map[sys_name] = []
-                if pos_num not in sys_map[sys_name]:
-                    sys_map[sys_name].append(pos_num)
+
+            # Wykryj numer pozycji - obsługuje zarówno "Poz. 1)" jak i "Poz. 1 "
+            line = ";".join(str(c) for c in row)
+            m_poz = re.search(r"Poz\.\s*(\d+)\s*[).:]?", line, re.IGNORECASE)
+            if m_poz:
+                current_pos = m_poz.group(1)
+
+            # Wykryj system z linii "System:" + następna linia
+            if current_pos is None:
+                continue
+
+            has_system_marker = any("System:" in str(cell) for cell in row)
+            if not has_system_marker:
+                continue
+
+            # Szukamy nazwy systemu w następnym wierszu
+            if i + 1 >= len(rows):
+                continue
+
+            next_row = rows[i + 1]
+            for cell in next_row:
+                cell_val = str(cell).strip().strip('"').strip("'")
+                if not cell_val:
+                    continue
+
+                # Poz. wielosystemowa: "MB-86N ST;MB-118EI" → split po ";"
+                raw_systems = [s.strip() for s in cell_val.split(";") if s.strip()]
+                for sys_raw in raw_systems:
+                    # Filtruj tylko tokeny wyglądające jak nazwa systemu (np. MB-, CS-, SL-)
+                    if not re.match(r"^[A-Za-z]{2,}-", sys_raw):
+                        continue
+                    sys_name = get_clean_system_name(sys_raw)
+                    if not sys_name or sys_name == "UNKNOWN":
+                        continue
+                    if sys_name not in sys_map:
+                        sys_map[sys_name] = []
+                    if current_pos not in sys_map[sys_name]:
+                        sys_map[sys_name].append(current_pos)
+                break  # Pierwsza niepusta komórka wystarczy
+
         return sys_map
     else:
         return _get_reynaers_positions(csv_path)
@@ -436,9 +466,6 @@ def _parse_logikal_position(
             else:
                 desc = get_desc_for_code(i + 1)
                 last_fetched_desc = desc
-
-            if current_section == "hardware":
-                desc = vendor_profile.format_hardware_desc(desc)
 
             if current_section == "hardware":
                 desc = vendor_profile.format_hardware_desc(desc)
